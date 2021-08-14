@@ -115,12 +115,13 @@ pub struct ContextInner {
     // pub present_images: Vec<vk::Image>,
     pub pool: vk::CommandPool,
     // pub command_buffer: vk::CommandBuffer,
-    pub present_complete_semaphore: vk::Semaphore,
-    pub rendering_complete_semaphore: vk::Semaphore,
+    // pub present_complete_semaphore: vk::Semaphore,
+    // pub rendering_complete_semaphore: vk::Semaphore,
 
     // pub window_width: u32,
     // pub window_height: u32,
     pub allocation_callbacks: *const vk::AllocationCallbacks,
+    pub limits: vk::PhysicalDeviceLimits,
 }
 
 impl ContextInner {
@@ -149,7 +150,7 @@ impl ContextInner {
                 .application_version(0)
                 .engine_name(&app_name)
                 .engine_version(0)
-                .api_version(vk::make_version(1, 1, 0));
+                .api_version(vk::make_api_version(0,1, 1, 0));
             let mut validation_features = vk::ValidationFeaturesEXT::builder()
                 .enabled_validation_features(&[vk::ValidationFeatureEnableEXT::DEBUG_PRINTF])
                 .build();
@@ -348,19 +349,19 @@ impl ContextInner {
             // let present_images = swapchain_loader.get_swapchain_images(swapchain).unwrap();
             let device_memory_properties = instance.get_physical_device_memory_properties(pdevice);
 
-            let semaphore_create_info = vk::SemaphoreCreateInfo::default();
+            // let semaphore_create_info = vk::SemaphoreCreateInfo::default();
 
-            let present_complete_semaphore = device
-                .create_semaphore(&semaphore_create_info, None)
-                .unwrap();
-            let rendering_complete_semaphore = device
-                .create_semaphore(&semaphore_create_info, None)
-                .unwrap();
-            // {
-            //     let props = instance.get_physical_device_properties(pdevice);
-            //     let limits = props.limits;
-            //     println!("{:?}", limits);
-            // }
+            // let present_complete_semaphore = device
+            //     .create_semaphore(&semaphore_create_info, None)
+            //     .unwrap();
+            // let rendering_complete_semaphore = device
+            //     .create_semaphore(&semaphore_create_info, None)
+            //     .unwrap();
+            let limits = {
+                let props = instance.get_physical_device_properties(pdevice);
+                props.limits
+                // println!("{:?}", limits);
+            };
             let pipeline_cache = device
                 .create_pipeline_cache(&vk::PipelineCacheCreateInfo::builder().build(), None)
                 .unwrap();
@@ -383,13 +384,14 @@ impl ContextInner {
                 queue: present_queue,
                 pool,
                 // command_buffer,
-                present_complete_semaphore,
-                rendering_complete_semaphore,
+                // present_complete_semaphore,
+                // rendering_complete_semaphore,
                 // surface,
                 debug_call_back,
                 debug_utils_loader,
                 pipeline_cache,
                 allocation_callbacks: std::ptr::null(),
+                limits
                 // window_width: physical_dimensions.width as u32,
                 // window_height: physical_dimensions.height as u32,
             }
@@ -403,10 +405,10 @@ impl Drop for ContextInner {
             self.device.device_wait_idle().unwrap();
             self.device
                 .destroy_pipeline_cache(self.pipeline_cache, None);
-            self.device
-                .destroy_semaphore(self.present_complete_semaphore, None);
-            self.device
-                .destroy_semaphore(self.rendering_complete_semaphore, None);
+            // self.device
+            //     .destroy_semaphore(self.present_complete_semaphore, None);
+            // self.device
+            //     .destroy_semaphore(self.rendering_complete_semaphore, None);
             self.device.destroy_command_pool(self.pool, None);
             // self.swapchain_loader
             // .destroy_swapchain(self.swapchain, None);
