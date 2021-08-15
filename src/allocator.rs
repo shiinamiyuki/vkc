@@ -160,7 +160,7 @@ impl GPUAllocator {
             let size = obj.size;
             let block = MemoryBlock {
                 alloc_obj: Rc::new(obj),
-                size: size,
+                size,
                 start: 0,
                 offset: 0,
                 capacity: size,

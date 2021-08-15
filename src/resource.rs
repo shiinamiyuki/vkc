@@ -18,6 +18,7 @@ pub struct TBuffer<T: bytemuck::Pod> {
     pub memory: Option<MemoryBlock>,
     pub mem_req: vk::MemoryRequirements,
     pub usage: vk::BufferUsageFlags,
+    pub memory_property: vk::MemoryPropertyFlags,
     phantom: PhantomData<T>,
 }
 pub fn copy_buffer_to_buffer(
@@ -57,11 +58,63 @@ pub fn find_memorytype_index(
 }
 pub struct TBufferMap<'a, T: bytemuck::Pod> {
     parent: &'a TBuffer<T>,
+    pub slice: &'a [T],
+    staging_buffer: Option<TBuffer<T>>,
+    command_buffer: vk::CommandBuffer,
+}
+pub struct TBufferMapMut<'a, T: bytemuck::Pod> {
+    parent: &'a TBuffer<T>,
     pub slice: &'a mut [T],
+    staging_buffer: Option<TBuffer<T>>,
+    command_buffer: vk::CommandBuffer,
+}
+struct TBufferMapRaw<'a, T: bytemuck::Pod> {
+    parent: &'a TBuffer<T>,
+    pub slice: &'a mut [T],
+    staging_buffer: Option<TBuffer<T>>,
+    command_buffer: vk::CommandBuffer,
 }
 impl<'a, T: bytemuck::Pod> Drop for TBufferMap<'a, T> {
     fn drop(&mut self) {
-        self.parent.unmap();
+        unsafe {
+            let ctx = &self.parent.ctx;
+            if let Some(staging_buffer) = &self.staging_buffer {
+                ctx.device
+                    .unmap_memory(staging_buffer.memory.as_ref().unwrap().alloc_obj.memory);
+                let command_buffer = self.command_buffer;
+                ctx.device.free_command_buffers(ctx.pool, &[command_buffer]);
+            } else {
+                ctx.device
+                    .unmap_memory(self.parent.memory.as_ref().unwrap().alloc_obj.memory);
+            }
+        }
+    }
+}
+
+impl<'a, T: bytemuck::Pod> Drop for TBufferMapMut<'a, T> {
+    fn drop(&mut self) {
+        unsafe {
+            let ctx = &self.parent.ctx;
+            if let Some(staging_buffer) = &self.staging_buffer {
+                ctx.device
+                    .unmap_memory(staging_buffer.memory.as_ref().unwrap().alloc_obj.memory);
+                let command_buffer = self.command_buffer;
+
+                copy_buffer_to_buffer(
+                    staging_buffer.handle,
+                    staging_buffer.memory.as_ref().unwrap().offset,
+                    self.parent.handle,
+                    self.parent.memory.as_ref().unwrap().offset,
+                    (self.parent.size * std::mem::size_of::<T>()) as vk::DeviceSize,
+                    command_buffer,
+                    ctx,
+                );
+                ctx.device.free_command_buffers(ctx.pool, &[command_buffer]);
+            } else {
+                ctx.device
+                    .unmap_memory(self.parent.memory.as_ref().unwrap().alloc_obj.memory);
+            }
+        }
     }
 }
 
@@ -88,6 +141,7 @@ where
                 mem_req: vk::MemoryRequirements::default(),
                 usage: usage,
                 ctx: ctx.clone(),
+                memory_property: memory_property_flags,
             };
         }
 
@@ -123,14 +177,33 @@ where
                 mem_req: req,
                 usage: usage,
                 ctx: ctx.clone(),
+                memory_property: memory_property_flags,
             }
         }
     }
     pub fn store(&self, data: &[T]) {
         assert!(!self.is_empty());
         assert!(self.size == data.len());
-        let mapped = self.map_range(.., vk::MemoryMapFlags::empty());
+        let mapped = self.map_range_mut(.., vk::MemoryMapFlags::empty());
         mapped.slice.copy_from_slice(data);
+    }
+    pub fn map_range_mut<'a, S: RangeBounds<vk::DeviceSize>>(
+        &'a self,
+        range: S,
+        memory_map_flags: vk::MemoryMapFlags,
+    ) -> TBufferMapMut<'a, T> {
+        assert!(!self.is_empty());
+        let start: vk::DeviceSize = match range.start_bound() {
+            Bound::Included(x) => *x,
+            Bound::Excluded(x) => x + 1,
+            Bound::Unbounded => 0,
+        };
+        let end: vk::DeviceSize = match range.end_bound() {
+            Bound::Included(x) => x + 1,
+            Bound::Excluded(x) => *x,
+            Bound::Unbounded => self.size as vk::DeviceSize,
+        };
+        self.map_mut(start, end - start, memory_map_flags)
     }
     pub fn map_range<'a, S: RangeBounds<vk::DeviceSize>>(
         &'a self,
@@ -150,39 +223,120 @@ where
         };
         self.map(start, end - start, memory_map_flags)
     }
+    fn map_raw<'a>(
+        &'a self,
+        offset: u64,
+        len: u64,
+        memory_map_flags: vk::MemoryMapFlags,
+    ) -> TBufferMapRaw<'a, T> {
+        assert!(!self.is_empty());
+        unsafe {
+            if !self
+                .memory_property
+                .contains(vk::MemoryPropertyFlags::HOST_VISIBLE)
+            {
+                let staging_buffer = TBuffer::<T>::new(
+                    &self.ctx,
+                    self.size,
+                    vk::BufferUsageFlags::TRANSFER_SRC | vk::BufferUsageFlags::TRANSFER_DST,
+                    vk::SharingMode::EXCLUSIVE,
+                    vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
+                );
+                let ptr = self
+                    .ctx
+                    .device
+                    .map_memory(
+                        staging_buffer.memory.as_ref().unwrap().alloc_obj.memory,
+                        staging_buffer.memory.as_ref().unwrap().offset + offset,
+                        std::mem::size_of::<T>() as u64 * len,
+                        memory_map_flags,
+                    )
+                    .unwrap();
+                let command_buffer = self
+                    .ctx
+                    .device
+                    .allocate_command_buffers(
+                        &vk::CommandBufferAllocateInfo::builder()
+                            .command_buffer_count(1)
+                            .command_pool(self.ctx.pool)
+                            .level(vk::CommandBufferLevel::PRIMARY)
+                            .build(),
+                    )
+                    .unwrap()[0];
+                
+                copy_buffer_to_buffer(
+                    self.handle,
+                    self.memory.as_ref().unwrap().offset,
+                    staging_buffer.handle,
+                    staging_buffer.memory.as_ref().unwrap().offset,
+                    (self.size * std::mem::size_of::<T>()) as vk::DeviceSize,
+                    command_buffer,
+                    &self.ctx,
+                );
+                let slice = std::slice::from_raw_parts_mut(ptr as *mut T, len as usize);
+                TBufferMapRaw::<'a> {
+                    slice,
+                    parent: &self,
+                    staging_buffer: Some(staging_buffer),
+                    command_buffer,
+                }
+            } else {
+                let ptr = self
+                    .ctx
+                    .device
+                    .map_memory(
+                        self.memory.as_ref().unwrap().alloc_obj.memory,
+                        self.memory.as_ref().unwrap().offset + offset,
+                        std::mem::size_of::<T>() as u64 * len,
+                        memory_map_flags,
+                    )
+                    .unwrap();
+                let slice = std::slice::from_raw_parts_mut(ptr as *mut T, len as usize);
+                TBufferMapRaw::<'a> {
+                    slice,
+                    parent: &self,
+                    staging_buffer: None,
+                    command_buffer: vk::CommandBuffer::null(),
+                }
+            }
+        }
+    }
+    pub fn map_mut<'a>(
+        &'a self,
+        offset: u64,
+        len: u64,
+        memory_map_flags: vk::MemoryMapFlags,
+    ) -> TBufferMapMut<'a, T> {
+        let raw = self.map_raw(offset, len, memory_map_flags);
+        TBufferMapMut::<'a> {
+            slice: raw.slice,
+            parent: raw.parent,
+            staging_buffer: raw.staging_buffer,
+            command_buffer: raw.command_buffer,
+        }
+    }
     pub fn map<'a>(
         &'a self,
         offset: u64,
         len: u64,
         memory_map_flags: vk::MemoryMapFlags,
     ) -> TBufferMap<'a, T> {
-        assert!(!self.is_empty());
-        unsafe {
-            let ptr = self
-                .ctx
-                .device
-                .map_memory(
-                    self.memory.as_ref().unwrap().alloc_obj.memory,
-                    self.memory.as_ref().unwrap().offset + offset,
-                    std::mem::size_of::<T>() as u64 * len,
-                    memory_map_flags,
-                )
-                .unwrap();
-            let slice = std::slice::from_raw_parts_mut(ptr as *mut T, len as usize);
-            TBufferMap::<'a> {
-                slice,
-                parent: &self,
-            }
+        let raw = self.map_raw(offset, len, memory_map_flags);
+        TBufferMap::<'a> {
+            slice: raw.slice,
+            parent: raw.parent,
+            staging_buffer: raw.staging_buffer,
+            command_buffer: raw.command_buffer,
         }
     }
-    fn unmap(&self) {
-        assert!(!self.is_empty());
-        unsafe {
-            self.ctx
-                .device
-                .unmap_memory(self.memory.as_ref().unwrap().alloc_obj.memory);
-        }
-    }
+    // fn unmap(&self) {
+    //     assert!(!self.is_empty());
+    //     unsafe {
+    //         self.ctx
+    //             .device
+    //             .unmap_memory(self.memory.as_ref().unwrap().alloc_obj.memory);
+    //     }
+    // }
 }
 impl<T: bytemuck::Pod> Drop for TBuffer<T> {
     fn drop(&mut self) {
@@ -195,9 +349,6 @@ impl<T: bytemuck::Pod> Drop for TBuffer<T> {
         }
     }
 }
-// pub struct StagingBuffer {
-
-// }
 // pub struct TBufferView<T: bytemuck::Pod> {
 //     pub handle: vk::BufferView,
 //     phantom: PhantomData<T>,
@@ -357,7 +508,7 @@ impl Image {
                 vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
             );
             {
-                let mapped = staging_buffer.map_range(.., vk::MemoryMapFlags::empty());
+                let mapped = staging_buffer.map_range_mut(.., vk::MemoryMapFlags::empty());
                 mapped.slice.copy_from_slice(data);
             }
             let image = ctx

@@ -3,11 +3,40 @@ use ash::vk;
 mod tests {
     use ash::vk;
 
-    use crate::{Context, TBuffer, align_to};
+    use crate::{align_to, Context, TBuffer};
     #[test]
     fn test_utils() {
-        assert_eq!(align_to(123,16), 128);
+        assert_eq!(align_to(123, 16), 128);
         assert_eq!(align_to(80, 25), 100);
+    }
+    #[test]
+    fn test_buffer_map() {
+        let ctx = Context::new(true);
+        for i in 1..1024 {
+            let buffer: TBuffer<usize> = TBuffer::new(
+                &ctx,
+                15 * i,
+                vk::BufferUsageFlags::STORAGE_BUFFER
+                    | vk::BufferUsageFlags::TRANSFER_DST
+                    | vk::BufferUsageFlags::TRANSFER_SRC,
+                vk::SharingMode::EXCLUSIVE,
+                vk::MemoryPropertyFlags::DEVICE_LOCAL,
+            );
+            {
+                let mapped = buffer.map_range_mut(.., vk::MemoryMapFlags::empty());
+                let _ = mapped.slice.iter_mut().enumerate().map(|(i, x)| {
+                    *x = i;
+                });
+            }
+            {
+                let mapped = buffer.map_range(.., vk::MemoryMapFlags::empty());
+                let _ = mapped
+                    .slice
+                    .iter()
+                    .enumerate()
+                    .map(|(i, x)| assert_eq!(*x, i));
+            }
+        }
     }
     #[test]
     fn test_buffer_alloc() {
