@@ -247,6 +247,8 @@ impl ContextInner {
             let mut robustness2features = vk::PhysicalDeviceRobustness2FeaturesEXT::builder()
                 .null_descriptor(true)
                 .build();
+            let mut query_reset_features = vk::PhysicalDeviceHostQueryResetFeatures::builder()
+                .host_query_reset(true).build();
             let device_create_info = vk::DeviceCreateInfo::builder()
                 .queue_create_infos(&queue_info)
                 .enabled_extension_names(&device_extension_names_raw)
@@ -254,6 +256,7 @@ impl ContextInner {
                 .push_next(&mut scalar_block)
                 .push_next(&mut descriptor_indexing)
                 .push_next(&mut robustness2features)
+                .push_next(&mut query_reset_features)
                 .build();
 
             let device: ash::Device = instance
