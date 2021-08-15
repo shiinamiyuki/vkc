@@ -1,10 +1,4 @@
-use std::{
-    borrow::Cow,
-    ffi::{c_void, CStr, CString},
-    os::raw::c_char,
-    process::abort,
-    sync::Arc,
-};
+use std::{borrow::Cow, cell::RefCell, ffi::{c_void, CStr, CString}, os::raw::c_char, process::abort, sync::{Arc, RwLock}};
 
 use ash::{
     extensions::{
@@ -13,6 +7,8 @@ use ash::{
     },
     vk, Entry,
 };
+
+use crate::allocator::GPUAllocator;
 
 // pub struct ContextInner {
 //     pub device: ash::Device,
@@ -122,6 +118,7 @@ pub struct ContextInner {
     // pub window_height: u32,
     pub allocation_callbacks: *const vk::AllocationCallbacks,
     pub limits: vk::PhysicalDeviceLimits,
+    pub allocator: RwLock<Option<GPUAllocator>>,
 }
 
 impl ContextInner {
@@ -150,7 +147,7 @@ impl ContextInner {
                 .application_version(0)
                 .engine_name(&app_name)
                 .engine_version(0)
-                .api_version(vk::make_api_version(0,1, 1, 0));
+                .api_version(vk::make_api_version(0, 1, 1, 0));
             let mut validation_features = vk::ValidationFeaturesEXT::builder()
                 .enabled_validation_features(&[vk::ValidationFeatureEnableEXT::DEBUG_PRINTF])
                 .build();
@@ -391,7 +388,8 @@ impl ContextInner {
                 debug_utils_loader,
                 pipeline_cache,
                 allocation_callbacks: std::ptr::null(),
-                limits
+                limits,
+                allocator: RwLock::new(None),
                 // window_width: physical_dimensions.width as u32,
                 // window_height: physical_dimensions.height as u32,
             }
@@ -436,9 +434,15 @@ impl Drop for ContextInner {
 // }
 impl Context {
     pub fn new(enable_validation: bool) -> Self {
-        Self {
+        let ctx = Self {
             inner: Arc::new(ContextInner::new(enable_validation)),
+        };
+        let allocator = GPUAllocator::new(&ctx);
+        {
+            let mut a = ctx.inner.allocator.write().unwrap();
+            *a = Some(allocator);
         }
+        ctx
     }
 }
 

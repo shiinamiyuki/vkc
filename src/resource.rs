@@ -5,9 +5,9 @@ use std::{
     ops::{Bound, RangeBounds},
 };
 
-use ash::{
-    vk,
-};
+use ash::vk;
+
+use crate::allocator::MemoryBlock;
 
 use super::Context;
 
@@ -15,13 +15,32 @@ pub struct TBuffer<T: bytemuck::Pod> {
     pub ctx: Context,
     pub handle: vk::Buffer,
     pub size: usize,
-    pub memory: vk::DeviceMemory,
+    pub memory: Option<MemoryBlock>,
     pub mem_req: vk::MemoryRequirements,
     pub usage: vk::BufferUsageFlags,
     phantom: PhantomData<T>,
-    is_null: bool,
 }
-
+pub fn copy_buffer_to_buffer(
+    src: vk::Buffer,
+    src_offset: vk::DeviceSize,
+    dst: vk::Buffer,
+    dst_offset: vk::DeviceSize,
+    size: vk::DeviceSize,
+    command_buffer: vk::CommandBuffer,
+    ctx: &Context,
+) {
+    begin_command_buffer(command_buffer, ctx);
+    let region = vk::BufferCopy::builder()
+        .src_offset(src_offset)
+        .dst_offset(dst_offset)
+        .size(size)
+        .build();
+    unsafe {
+        ctx.device
+            .cmd_copy_buffer(command_buffer, src, dst, &[region]);
+    };
+    end_command_buffer(command_buffer, ctx);
+}
 pub fn find_memorytype_index(
     memory_req: &vk::MemoryRequirements,
     memory_prop: &vk::PhysicalDeviceMemoryProperties,
@@ -51,7 +70,7 @@ where
     T: bytemuck::Pod,
 {
     pub fn is_empty(&self) -> bool {
-        self.is_null
+        self.memory.is_none()
     }
     pub fn new(
         ctx: &Context,
@@ -64,19 +83,20 @@ where
             return Self {
                 handle: vk::Buffer::null(),
                 phantom: PhantomData {},
-                memory: vk::DeviceMemory::null(),
+                memory: None,
                 size,
                 mem_req: vk::MemoryRequirements::default(),
                 usage: usage,
                 ctx: ctx.clone(),
-                is_null: true,
             };
         }
-        let create_info = vk::BufferCreateInfo::builder()
-            .size((size * std::mem::size_of::<T>()) as u64)
-            .usage(usage)
-            .sharing_mode(sharing_mode);
+
         unsafe {
+            let create_info = vk::BufferCreateInfo::builder()
+                .size((size * std::mem::size_of::<T>()) as u64)
+                .usage(usage)
+                .sharing_mode(sharing_mode);
+
             let handle = ctx
                 .device
                 .create_buffer(&create_info, ctx.allocation_callbacks.as_ref())
@@ -86,43 +106,31 @@ where
             let memory_index =
                 find_memorytype_index(&req, &ctx.device_memory_properties, memory_property_flags)
                     .unwrap();
-            let index_allocate_info = vk::MemoryAllocateInfo {
-                allocation_size: req.size,
-                memory_type_index: memory_index,
-                ..Default::default()
+            let memory_block = {
+                let mut allocator = ctx.allocator.write().unwrap();
+                let allocator = allocator.as_mut().unwrap();
+                allocator.allocate(req.size, req.alignment, memory_index)
             };
-            let memory = ctx
-                .device
-                .allocate_memory(&index_allocate_info, ctx.allocation_callbacks.as_ref())
+            ctx.device
+                .bind_buffer_memory(handle, memory_block.alloc_obj.memory, memory_block.offset)
                 .unwrap();
-            ctx.device.bind_buffer_memory(handle, memory, 0).unwrap();
 
             Self {
                 handle,
                 phantom: PhantomData {},
-                memory,
+                memory: Some(memory_block),
                 size,
                 mem_req: req,
                 usage: usage,
                 ctx: ctx.clone(),
-                is_null: false,
             }
         }
     }
     pub fn store(&self, data: &[T]) {
         assert!(!self.is_empty());
-        unsafe {
-            assert!(self.size == data.len());
-            // let mapped = self.map(0, self.size as u64, vk::MemoryMapFlags::empty());
-            // let mut mapped_slice = Align::new(
-            //     mapped.slice.as_mut_ptr() as *mut c_void,
-            //     align_of::<T>() as u64,
-            //     self.size as u64,
-            // );
-            // mapped_slice.copy_from_slice(&data);
-            let mapped = self.map_range(.., vk::MemoryMapFlags::empty());
-            mapped.slice.copy_from_slice(data);
-        }
+        assert!(self.size == data.len());
+        let mapped = self.map_range(.., vk::MemoryMapFlags::empty());
+        mapped.slice.copy_from_slice(data);
     }
     pub fn map_range<'a, S: RangeBounds<vk::DeviceSize>>(
         &'a self,
@@ -154,8 +162,8 @@ where
                 .ctx
                 .device
                 .map_memory(
-                    self.memory,
-                    offset,
+                    self.memory.as_ref().unwrap().alloc_obj.memory,
+                    self.memory.as_ref().unwrap().offset + offset,
                     std::mem::size_of::<T>() as u64 * len,
                     memory_map_flags,
                 )
@@ -170,24 +178,26 @@ where
     fn unmap(&self) {
         assert!(!self.is_empty());
         unsafe {
-            self.ctx.device.unmap_memory(self.memory);
+            self.ctx
+                .device
+                .unmap_memory(self.memory.as_ref().unwrap().alloc_obj.memory);
         }
     }
 }
 impl<T: bytemuck::Pod> Drop for TBuffer<T> {
     fn drop(&mut self) {
-        if !self.is_null {
+        if self.memory.is_some() {
             unsafe {
                 self.ctx
                     .device
                     .destroy_buffer(self.handle, self.ctx.allocation_callbacks.as_ref());
-                self.ctx
-                    .device
-                    .free_memory(self.memory, self.ctx.allocation_callbacks.as_ref());
             }
         }
     }
 }
+// pub struct StagingBuffer {
+
+// }
 // pub struct TBufferView<T: bytemuck::Pod> {
 //     pub handle: vk::BufferView,
 //     phantom: PhantomData<T>,
@@ -290,6 +300,7 @@ fn transition_image_layout(
 }
 fn copy_buffer_to_image(
     buffer: vk::Buffer,
+    buffer_offset: vk::DeviceSize,
     image: vk::Image,
     width: u32,
     height: u32,
@@ -298,7 +309,7 @@ fn copy_buffer_to_image(
 ) {
     begin_command_buffer(command_buffer, ctx);
     let region = vk::BufferImageCopy::builder()
-        .buffer_offset(0)
+        .buffer_offset(buffer_offset)
         .buffer_row_length(0)
         .buffer_image_height(0)
         .image_subresource(
@@ -327,11 +338,12 @@ fn copy_buffer_to_image(
     };
     end_command_buffer(command_buffer, ctx);
 }
+
 pub struct Image {
     pub handle: vk::Image,
     pub view: vk::ImageView,
     pub ctx: Context,
-    pub memory: vk::DeviceMemory,
+    pub memory: MemoryBlock,
     pub mem_req: vk::MemoryRequirements,
 }
 impl Image {
@@ -373,22 +385,24 @@ impl Image {
                 )
                 .unwrap();
             let memory_requirements = ctx.device.get_image_memory_requirements(image);
-            let alloc_info = vk::MemoryAllocateInfo::builder()
-                .allocation_size(memory_requirements.size)
-                .memory_type_index(
-                    find_memorytype_index(
-                        &memory_requirements,
-                        &ctx.device_memory_properties,
-                        vk::MemoryPropertyFlags::DEVICE_LOCAL,
-                    )
-                    .unwrap(),
+            let memory_index = find_memorytype_index(
+                &memory_requirements,
+                &ctx.device_memory_properties,
+                vk::MemoryPropertyFlags::DEVICE_LOCAL,
+            )
+            .unwrap();
+            let memory_block = {
+                let mut allocator = ctx.allocator.write().unwrap();
+                let allocator = allocator.as_mut().unwrap();
+                allocator.allocate(
+                    memory_requirements.size,
+                    memory_requirements.alignment,
+                    memory_index,
                 )
-                .build();
-            let memory = ctx
-                .device
-                .allocate_memory(&alloc_info, ctx.allocation_callbacks.as_ref())
+            };
+            ctx.device
+                .bind_image_memory(image, memory_block.alloc_obj.memory, memory_block.offset)
                 .unwrap();
-            ctx.device.bind_image_memory(image, memory, 0);
             let command_buffer = ctx
                 .device
                 .allocate_command_buffers(
@@ -409,6 +423,7 @@ impl Image {
             );
             copy_buffer_to_image(
                 staging_buffer.handle,
+                staging_buffer.memory.as_ref().unwrap().offset,
                 image,
                 extent.width,
                 extent.height,
@@ -447,7 +462,7 @@ impl Image {
                 handle: image,
                 ctx: ctx.clone(),
                 mem_req: memory_requirements,
-                memory,
+                memory: memory_block,
                 view,
             }
         }
@@ -463,9 +478,6 @@ impl Drop for Image {
             self.ctx
                 .device
                 .destroy_image(self.handle, self.ctx.allocation_callbacks.as_ref());
-            self.ctx
-                .device
-                .free_memory(self.memory, self.ctx.allocation_callbacks.as_ref());
         }
     }
 }
