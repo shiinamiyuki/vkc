@@ -124,7 +124,7 @@ impl GPUAllocator {
             } else {
                 size + alignment - (block.start % alignment)
             };
-            good &= (block.size - block.start) >= aligned_size;
+            good &= (block.capacity - block.start) >= aligned_size;
             good &= block.alloc_obj.memory_index == memory_type_index;
             if good {
                 // chosen = Some(block.clone());

@@ -102,9 +102,9 @@ impl<'a, T: bytemuck::Pod> Drop for TBufferMapMut<'a, T> {
 
                 copy_buffer_to_buffer(
                     staging_buffer.handle,
-                    staging_buffer.memory.as_ref().unwrap().offset,
+                    0,
                     self.parent.handle,
-                    self.parent.memory.as_ref().unwrap().offset,
+                    0,
                     (self.parent.size * std::mem::size_of::<T>()) as vk::DeviceSize,
                     command_buffer,
                     ctx,
@@ -263,12 +263,12 @@ where
                             .build(),
                     )
                     .unwrap()[0];
-                
+
                 copy_buffer_to_buffer(
                     self.handle,
-                    self.memory.as_ref().unwrap().offset,
+                    0,
                     staging_buffer.handle,
-                    staging_buffer.memory.as_ref().unwrap().offset,
+                    0,
                     (self.size * std::mem::size_of::<T>()) as vk::DeviceSize,
                     command_buffer,
                     &self.ctx,
@@ -346,6 +346,9 @@ impl<T: bytemuck::Pod> Drop for TBuffer<T> {
                     .device
                     .destroy_buffer(self.handle, self.ctx.allocation_callbacks.as_ref());
             }
+            let mut allocator = self.ctx.allocator.write().unwrap();
+            let allocator = allocator.as_mut().unwrap();
+            allocator.free(self.memory.as_ref().unwrap());
         }
     }
 }
@@ -574,7 +577,7 @@ impl Image {
             );
             copy_buffer_to_image(
                 staging_buffer.handle,
-                staging_buffer.memory.as_ref().unwrap().offset,
+                0,
                 image,
                 extent.width,
                 extent.height,
@@ -630,6 +633,9 @@ impl Drop for Image {
                 .device
                 .destroy_image(self.handle, self.ctx.allocation_callbacks.as_ref());
         }
+        let mut allocator = self.ctx.allocator.write().unwrap();
+        let allocator = allocator.as_mut().unwrap();
+        allocator.free(&self.memory);
     }
 }
 
