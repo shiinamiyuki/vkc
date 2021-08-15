@@ -3,7 +3,12 @@ use ash::vk;
 mod tests {
     use ash::vk;
 
-    use crate::{align_to, Context, TBuffer};
+    use crate::{Context, Profiler, TBuffer, align_to};
+    #[test] 
+    fn test_profiler() {
+        let ctx = Context::new(true);
+        let profiler = Profiler::new(&ctx, 1024);
+    }
     #[test]
     fn test_utils() {
         assert_eq!(align_to(123, 16), 128);
@@ -62,7 +67,9 @@ pub mod allocator;
 pub mod ctx;
 pub mod kernel;
 pub mod resource;
+pub mod profile;
 
 pub use ctx::*;
 pub use kernel::*;
 pub use resource::*;
+pub use profile::*;

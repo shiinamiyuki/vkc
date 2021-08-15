@@ -258,9 +258,9 @@ fn create_descriptor_set_layout(
                 .enumerate()
                 .map(|(i, binding)| {
                     let ty = match binding {
-                        Binding::StorageBuffer(x) => vk::DescriptorType::STORAGE_BUFFER,
-                        Binding::UniformBuffer(x) => vk::DescriptorType::UNIFORM_BUFFER,
-                        Binding::AccelerationStructure(x) => {
+                        Binding::StorageBuffer(_x) => vk::DescriptorType::STORAGE_BUFFER,
+                        Binding::UniformBuffer(_x) => vk::DescriptorType::UNIFORM_BUFFER,
+                        Binding::AccelerationStructure(_x) => {
                             vk::DescriptorType::ACCELERATION_STRUCTURE_NV
                         }
                         Binding::Sampler(_) => vk::DescriptorType::SAMPLER,
@@ -337,9 +337,9 @@ fn create_descriptor_set_layout(
 
 fn create_descriptor_set(
     device: &ash::Device,
-    allocation_callbacks: Option<&vk::AllocationCallbacks>,
+    _allocation_callbacks: Option<&vk::AllocationCallbacks>,
     set: &Set,
-    stage: vk::ShaderStageFlags,
+    _stage: vk::ShaderStageFlags,
     descriptor_pool: vk::DescriptorPool,
     descriptor_set_layout: vk::DescriptorSetLayout,
 ) -> VkResult<vk::DescriptorSet> {
