@@ -249,6 +249,9 @@ impl ContextInner {
                 .build();
             let mut query_reset_features = vk::PhysicalDeviceHostQueryResetFeatures::builder()
                 .host_query_reset(true).build();
+            let mut shader_atomic_float = vk::PhysicalDeviceShaderAtomicFloatFeaturesEXT::builder()
+                .shader_buffer_float32_atomic_add(true)
+                .shader_buffer_float32_atomics(true).build();
             let device_create_info = vk::DeviceCreateInfo::builder()
                 .queue_create_infos(&queue_info)
                 .enabled_extension_names(&device_extension_names_raw)
@@ -257,6 +260,7 @@ impl ContextInner {
                 .push_next(&mut descriptor_indexing)
                 .push_next(&mut robustness2features)
                 .push_next(&mut query_reset_features)
+                .push_next(&mut shader_atomic_float)
                 .build();
 
             let device: ash::Device = instance
