@@ -19,7 +19,45 @@ pub struct TBuffer<T: bytemuck::Pod> {
     pub mem_req: vk::MemoryRequirements,
     pub usage: vk::BufferUsageFlags,
     pub memory_property: vk::MemoryPropertyFlags,
+    pub sharing_mode: vk::SharingMode,
     phantom: PhantomData<T>,
+}
+impl<T: bytemuck::Pod> Clone for TBuffer<T> {
+    fn clone(&self) -> Self {
+        let clone = TBuffer::<T>::new(
+            &self.ctx,
+            self.size,
+            self.usage,
+            self.sharing_mode,
+            self.memory_property,
+        );
+        unsafe {
+            let command_buffer = self
+                .ctx
+                .device
+                .allocate_command_buffers(
+                    &vk::CommandBufferAllocateInfo::builder()
+                        .command_buffer_count(1)
+                        .command_pool(self.ctx.pool)
+                        .level(vk::CommandBufferLevel::PRIMARY)
+                        .build(),
+                )
+                .unwrap()[0];
+            copy_buffer_to_buffer(
+                self.handle,
+                0,
+                clone.handle,
+                0,
+                (self.size * std::mem::size_of::<T>()) as vk::DeviceSize,
+                command_buffer,
+                &self.ctx,
+            );
+            self.ctx
+                .device
+                .free_command_buffers(self.ctx.pool, &[command_buffer]);
+            clone
+        }
+    }
 }
 pub fn copy_buffer_to_buffer(
     src: vk::Buffer,
@@ -142,6 +180,7 @@ where
                 usage: usage,
                 ctx: ctx.clone(),
                 memory_property: memory_property_flags,
+                sharing_mode,
             };
         }
 
@@ -175,9 +214,10 @@ where
                 memory: Some(memory_block),
                 size,
                 mem_req: req,
-                usage: usage,
+                usage,
                 ctx: ctx.clone(),
                 memory_property: memory_property_flags,
+                sharing_mode,
             }
         }
     }
