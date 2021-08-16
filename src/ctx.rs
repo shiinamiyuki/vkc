@@ -221,6 +221,7 @@ impl ContextInner {
                 vk::ExtScalarBlockLayoutFn::name().as_ptr(),
                 vk::KhrGetMemoryRequirements2Fn::name().as_ptr(),
                 vk::KhrShaderNonSemanticInfoFn::name().as_ptr(),
+                vk::ExtShaderAtomicFloatFn::name().as_ptr()
             ];
 
             let priorities = [1.0];
