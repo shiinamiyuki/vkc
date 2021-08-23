@@ -95,6 +95,7 @@ pub struct ContextInner {
     pub entry: Entry,
     pub instance: ash::Instance,
     pub device: ash::Device,
+    pub extensions: Vec<Extension>,
     pub pipeline_cache: vk::PipelineCache,
     // pub surface_loader: Surface,
     // pub swapchain_loader: Swapchain,
@@ -280,7 +281,7 @@ impl ContextInner {
                 .shader_buffer_float32_atomic_add(true)
                 .shader_buffer_float32_atomics(true)
                 .build();
-            
+
             let device_create_info = {
                 let mut builder = vk::DeviceCreateInfo::builder()
                     .queue_create_infos(&queue_info)
@@ -413,6 +414,7 @@ impl ContextInner {
                 queue_family_index,
                 pdevice,
                 device_memory_properties,
+                extensions: info.enabled_extensions.iter().map(|x| *x).collect(),
                 // window,
                 // surface_loader,
                 // surface_format,

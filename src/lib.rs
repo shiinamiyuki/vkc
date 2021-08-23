@@ -3,7 +3,7 @@ use ash::vk;
 mod tests {
     use ash::vk;
 
-    use crate::{align_to, Context, ContextCreateInfo, Profiler, TBuffer};
+    use crate::{align_to, Context, ContextCreateInfo, Extension, Profiler, TBuffer};
     #[test]
     fn test_profiler() {
         let ctx = Context::new(ContextCreateInfo {
@@ -49,6 +49,23 @@ mod tests {
                     .map(|(i, x)| assert_eq!(*x, i));
             }
         }
+    }
+
+    #[test]
+    fn test_ext_mem_create() {
+        let ctx = Context::new(ContextCreateInfo {
+            enabled_extensions: &[Extension::ExternalMemory],
+            enable_validation: true,
+        });
+        let buffer: TBuffer<usize> = TBuffer::new(
+            &ctx,
+            1024,
+            vk::BufferUsageFlags::STORAGE_BUFFER
+                | vk::BufferUsageFlags::TRANSFER_DST
+                | vk::BufferUsageFlags::TRANSFER_SRC,
+            vk::SharingMode::EXCLUSIVE,
+            vk::MemoryPropertyFlags::DEVICE_LOCAL,
+        );
     }
 
     #[test]
@@ -105,6 +122,11 @@ mod tests {
 
 fn align_to(x: vk::DeviceSize, alignment: vk::DeviceSize) -> u64 {
     ((x + alignment - 1) / alignment) * alignment
+}
+
+#[cfg(target_os = "windows")]
+pub fn default_memory_handle_type() -> vk::ExternalMemoryHandleTypeFlags {
+    vk::ExternalMemoryHandleTypeFlags::OPAQUE_WIN32
 }
 pub mod allocator;
 pub mod ctx;

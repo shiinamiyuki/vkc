@@ -7,7 +7,7 @@ use std::{
 
 use ash::vk;
 
-use crate::allocator::MemoryBlock;
+use crate::{allocator::MemoryBlock, default_memory_handle_type};
 
 use super::Context;
 
@@ -163,6 +163,70 @@ where
     pub fn is_empty(&self) -> bool {
         self.memory.is_none()
     }
+    pub fn new_external(
+        ctx: &Context,
+        size: usize,
+        usage: vk::BufferUsageFlags,
+        sharing_mode: vk::SharingMode,
+        memory_property_flags: vk::MemoryPropertyFlags,
+    ) -> Self {
+        if size == 0 {
+            return Self {
+                handle: vk::Buffer::null(),
+                phantom: PhantomData {},
+                memory: None,
+                size,
+                mem_req: vk::MemoryRequirements::default(),
+                usage: usage,
+                ctx: ctx.clone(),
+                memory_property: memory_property_flags,
+                sharing_mode,
+            };
+        }
+
+        unsafe {
+            let mut create_info = vk::BufferCreateInfo::builder()
+                .size((size * std::mem::size_of::<T>()) as u64)
+                .usage(usage)
+                .sharing_mode(sharing_mode);
+
+            let mut ext = vk::ExternalMemoryBufferCreateInfo::builder()
+                .handle_types(default_memory_handle_type())
+                .build();
+            create_info = create_info.push_next(&mut ext);
+
+            let handle = ctx
+                .device
+                .create_buffer(&create_info, ctx.allocation_callbacks.as_ref())
+                .unwrap();
+
+            let req = ctx.device.get_buffer_memory_requirements(handle);
+            let memory_index =
+                find_memorytype_index(&req, &ctx.device_memory_properties, memory_property_flags)
+                    .unwrap();
+            let memory_block = {
+                let mut allocator = ctx.allocator.write().unwrap();
+                let allocator = allocator.as_mut().unwrap();
+                allocator.allocate(req.size, req.alignment, memory_index, true)
+            };
+            ctx.device
+                .bind_buffer_memory(handle, memory_block.alloc_obj.memory, memory_block.offset)
+                .unwrap();
+
+            Self {
+                handle,
+                phantom: PhantomData {},
+                memory: Some(memory_block),
+                size,
+                mem_req: req,
+                usage,
+                ctx: ctx.clone(),
+                memory_property: memory_property_flags,
+                sharing_mode,
+            }
+        }
+    }
+
     pub fn new(
         ctx: &Context,
         size: usize,
@@ -202,7 +266,7 @@ where
             let memory_block = {
                 let mut allocator = ctx.allocator.write().unwrap();
                 let allocator = allocator.as_mut().unwrap();
-                allocator.allocate(req.size, req.alignment, memory_index)
+                allocator.allocate(req.size, req.alignment, memory_index, false)
             };
             ctx.device
                 .bind_buffer_memory(handle, memory_block.alloc_obj.memory, memory_block.offset)
@@ -592,6 +656,7 @@ impl Image {
                     memory_requirements.size,
                     memory_requirements.alignment,
                     memory_index,
+                    false,
                 )
             };
             ctx.device

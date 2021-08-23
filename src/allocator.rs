@@ -1,9 +1,10 @@
 use ash::vk;
 use std::cell::RefCell;
 use std::collections::BTreeSet;
+use std::ffi::c_void;
 use std::rc::{Rc, Weak};
 
-use crate::{align_to, Context};
+use crate::{Context, align_to, default_memory_handle_type};
 
 pub struct MemoryAllocateInfo {
     pub size: vk::DeviceSize,
@@ -18,13 +19,17 @@ pub struct MemoryObject {
     ctx: Context,
 }
 impl MemoryObject {
-    fn new(ctx: &Context, size: vk::DeviceSize, memory_index: u32) -> Self {
+    fn new(ctx: &Context, size: vk::DeviceSize, memory_index: u32, external_memory: bool) -> Self {
         unsafe {
-            let allocate_info = vk::MemoryAllocateInfo {
-                allocation_size: size,
-                memory_type_index: memory_index,
-                ..Default::default()
-            };
+            let mut allocate_info = vk::MemoryAllocateInfo::builder()
+                .allocation_size(size)
+                .memory_type_index(memory_index);
+            let mut export_info = vk::ExportMemoryAllocateInfo::builder()
+                .handle_types(default_memory_handle_type());
+            if external_memory {
+                assert!(ctx.extensions.contains(&crate::Extension::ExternalMemory));
+                allocate_info = allocate_info.push_next(&mut export_info);
+            }
             let memory = ctx
                 .device
                 .allocate_memory(&allocate_info, ctx.allocation_callbacks.as_ref())
@@ -112,6 +117,7 @@ impl GPUAllocator {
         size: vk::DeviceSize,
         alignment: vk::DeviceSize,
         memory_type_index: u32,
+        external_memory: bool,
     ) -> MemoryBlock {
         let mut chosen: Option<MemoryBlock> = None;
         let mut splitted: Option<MemoryBlock> = None;
@@ -156,7 +162,12 @@ impl GPUAllocator {
             assert!(inside);
         }
         if chosen.is_none() {
-            let obj = MemoryObject::new(&self.ctx, size.max(65536), memory_type_index);
+            let obj = MemoryObject::new(
+                &self.ctx,
+                size.max(65536),
+                memory_type_index,
+                external_memory,
+            );
             let size = obj.size;
             let block = MemoryBlock {
                 alloc_obj: Rc::new(obj),
