@@ -1,4 +1,11 @@
-use std::{borrow::Cow, cell::RefCell, ffi::{c_void, CStr, CString}, os::raw::c_char, process::abort, sync::{Arc, RwLock}};
+use std::{
+    borrow::Cow,
+    cell::RefCell,
+    ffi::{c_void, CStr, CString},
+    os::raw::c_char,
+    process::abort,
+    sync::{Arc, RwLock},
+};
 
 use ash::{
     extensions::{
@@ -121,8 +128,17 @@ pub struct ContextInner {
     pub allocator: RwLock<Option<GPUAllocator>>,
 }
 
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Extension {
+    ShaderAtomicFloat,
+    ExternalMemory,
+}
+pub struct ContextCreateInfo<'a> {
+    pub enabled_extensions: &'a [Extension],
+    pub enable_validation: bool,
+}
 impl ContextInner {
-    pub fn new(enable_validation: bool) -> Self {
+    pub fn new(info: ContextCreateInfo<'_>) -> Self {
         unsafe {
             // let hidpi_factor: f64 = window.get_hidpi_factor();
             // let physical_dimensions = logical_dimensions.to_physical(hidpi_factor);
@@ -131,7 +147,7 @@ impl ContextInner {
             let app_name = CString::new("Rust_VK_RT_HLSL").unwrap();
 
             let mut layer_names = vec![];
-            if enable_validation {
+            if info.enable_validation {
                 layer_names.push(CString::new("VK_LAYER_KHRONOS_validation").unwrap());
             }
             // let layer_names: Vec<CString> = vec![];
@@ -155,7 +171,7 @@ impl ContextInner {
                 .application_info(&appinfo)
                 .enabled_layer_names(&layers_names_raw)
                 .enabled_extension_names(&extension_names_raw);
-            if enable_validation {
+            if info.enable_validation {
                 create_info = create_info.push_next(&mut validation_features);
             }
             let instance: ash::Instance = entry
@@ -214,16 +230,25 @@ impl ContextInner {
                 .expect("Couldn't find suitable device.");
             let queue_family_index = queue_family_index as u32;
 
-            let device_extension_names_raw = vec![
+            let mut device_extension_names_raw = vec![
                 // Swapchain::name().as_ptr(),
                 RayTracing::name().as_ptr(),
                 vk::ExtDescriptorIndexingFn::name().as_ptr(),
                 vk::ExtScalarBlockLayoutFn::name().as_ptr(),
                 vk::KhrGetMemoryRequirements2Fn::name().as_ptr(),
                 vk::KhrShaderNonSemanticInfoFn::name().as_ptr(),
-                vk::ExtShaderAtomicFloatFn::name().as_ptr()
+                // vk::ExtShaderAtomicFloatFn::name().as_ptr(),
+                // vk::KhrExternalMemoryWin32Fn::name().as_ptr(),
             ];
-
+            if info
+                .enabled_extensions
+                .contains(&Extension::ShaderAtomicFloat)
+            {
+                device_extension_names_raw.push(vk::ExtShaderAtomicFloatFn::name().as_ptr());
+            }
+            if info.enabled_extensions.contains(&Extension::ExternalMemory) {
+                device_extension_names_raw.push(vk::KhrExternalMemoryWin32Fn::name().as_ptr());
+            }
             let priorities = [1.0];
 
             let queue_info = [vk::DeviceQueueCreateInfo::builder()
@@ -249,20 +274,30 @@ impl ContextInner {
                 .null_descriptor(true)
                 .build();
             let mut query_reset_features = vk::PhysicalDeviceHostQueryResetFeatures::builder()
-                .host_query_reset(true).build();
+                .host_query_reset(true)
+                .build();
             let mut shader_atomic_float = vk::PhysicalDeviceShaderAtomicFloatFeaturesEXT::builder()
                 .shader_buffer_float32_atomic_add(true)
-                .shader_buffer_float32_atomics(true).build();
-            let device_create_info = vk::DeviceCreateInfo::builder()
-                .queue_create_infos(&queue_info)
-                .enabled_extension_names(&device_extension_names_raw)
-                .enabled_features(&features2.features)
-                .push_next(&mut scalar_block)
-                .push_next(&mut descriptor_indexing)
-                .push_next(&mut robustness2features)
-                .push_next(&mut query_reset_features)
-                .push_next(&mut shader_atomic_float)
+                .shader_buffer_float32_atomics(true)
                 .build();
+            
+            let device_create_info = {
+                let mut builder = vk::DeviceCreateInfo::builder()
+                    .queue_create_infos(&queue_info)
+                    .enabled_extension_names(&device_extension_names_raw)
+                    .enabled_features(&features2.features)
+                    .push_next(&mut scalar_block)
+                    .push_next(&mut descriptor_indexing)
+                    .push_next(&mut robustness2features)
+                    .push_next(&mut query_reset_features);
+                if info
+                    .enabled_extensions
+                    .contains(&Extension::ShaderAtomicFloat)
+                {
+                    builder = builder.push_next(&mut shader_atomic_float);
+                }
+                builder.build()
+            };
 
             let device: ash::Device = instance
                 .create_device(pdevice, &device_create_info, None)
@@ -441,9 +476,9 @@ impl Drop for ContextInner {
 //     }
 // }
 impl Context {
-    pub fn new(enable_validation: bool) -> Self {
+    pub fn new(info: ContextCreateInfo<'_>) -> Self {
         let ctx = Self {
-            inner: Arc::new(ContextInner::new(enable_validation)),
+            inner: Arc::new(ContextInner::new(info)),
         };
         let allocator = GPUAllocator::new(&ctx);
         {

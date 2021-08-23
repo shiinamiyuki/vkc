@@ -3,10 +3,13 @@ use ash::vk;
 mod tests {
     use ash::vk;
 
-    use crate::{Context, Profiler, TBuffer, align_to};
-    #[test] 
+    use crate::{align_to, Context, ContextCreateInfo, Profiler, TBuffer};
+    #[test]
     fn test_profiler() {
-        let ctx = Context::new(true);
+        let ctx = Context::new(ContextCreateInfo {
+            enabled_extensions: &[],
+            enable_validation: true,
+        });
         let profiler = Profiler::new(&ctx, 1024);
     }
     #[test]
@@ -16,7 +19,10 @@ mod tests {
     }
     #[test]
     fn test_buffer_clone() {
-        let ctx = Context::new(true);
+        let ctx = Context::new(ContextCreateInfo {
+            enabled_extensions: &[],
+            enable_validation: true,
+        });
         for i in 1..1024 {
             let buffer: TBuffer<usize> = TBuffer::new(
                 &ctx,
@@ -44,10 +50,13 @@ mod tests {
             }
         }
     }
-    
+
     #[test]
     fn test_buffer_map() {
-        let ctx = Context::new(true);
+        let ctx = Context::new(ContextCreateInfo {
+            enabled_extensions: &[],
+            enable_validation: true,
+        });
         for i in 1..1024 {
             let buffer: TBuffer<usize> = TBuffer::new(
                 &ctx,
@@ -76,7 +85,10 @@ mod tests {
     }
     #[test]
     fn test_buffer_alloc() {
-        let ctx = Context::new(true);
+        let ctx = Context::new(ContextCreateInfo {
+            enabled_extensions: &[],
+            enable_validation: true,
+        });
         let mut buffers = vec![];
         for i in 0..1024 {
             let buffer: TBuffer<[f32; 3]> = TBuffer::new(
@@ -97,10 +109,10 @@ fn align_to(x: vk::DeviceSize, alignment: vk::DeviceSize) -> u64 {
 pub mod allocator;
 pub mod ctx;
 pub mod kernel;
-pub mod resource;
 pub mod profile;
+pub mod resource;
 
 pub use ctx::*;
 pub use kernel::*;
-pub use resource::*;
 pub use profile::*;
+pub use resource::*;
