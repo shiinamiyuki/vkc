@@ -52,6 +52,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(target_os = "windows")]
     fn test_ext_mem_create() {
         let ctx = Context::new(ContextCreateInfo {
             enabled_extensions: &[Extension::ExternalMemory],
@@ -127,6 +128,10 @@ fn align_to(x: vk::DeviceSize, alignment: vk::DeviceSize) -> u64 {
 #[cfg(target_os = "windows")]
 pub fn default_memory_handle_type() -> vk::ExternalMemoryHandleTypeFlags {
     vk::ExternalMemoryHandleTypeFlags::OPAQUE_WIN32
+}
+#[cfg(target_os = "linux")]
+pub fn default_memory_handle_type() -> vk::ExternalMemoryHandleTypeFlags {
+    vk::ExternalMemoryHandleTypeFlags::OPAQUE_FD
 }
 pub mod allocator;
 pub mod ctx;
