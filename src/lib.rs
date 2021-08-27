@@ -133,6 +133,15 @@ pub fn default_memory_handle_type() -> vk::ExternalMemoryHandleTypeFlags {
 pub fn default_memory_handle_type() -> vk::ExternalMemoryHandleTypeFlags {
     vk::ExternalMemoryHandleTypeFlags::OPAQUE_FD
 }
+
+#[cfg(target_os = "windows")]
+pub fn default_semaphore_handle_type() -> vk::ExternalSemaphoreHandleTypeFlags {
+    vk::ExternalSemaphoreHandleTypeFlags::OPAQUE_WIN32
+}
+#[cfg(target_os = "linux")]
+pub fn default_semaphore_handle_type() -> vk::ExternalSemaphoreHandleTypeFlags {
+    vk::ExternalSemaphoreHandleTypeFlags::OPAQUE_FD
+}
 pub mod allocator;
 pub mod ctx;
 pub mod kernel;
