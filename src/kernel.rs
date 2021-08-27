@@ -11,6 +11,7 @@ use ash::{extensions::nv, prelude::VkResult, vk};
 use super::TBuffer;
 
 use super::Context;
+use super::Fence;
 pub struct KernelArgs<T> {
     pub sets: Vec<Set>,
     pub push_constants: Option<T>,
@@ -478,40 +479,14 @@ fn create_descriptor_set(
         }
     }
 }
-pub struct Fence {
-    inner: vk::Fence,
-    device: *const ash::Device,
-}
-impl Fence {
-    pub fn new(fence: vk::Fence, device: &ash::Device) -> Self {
-        Self {
-            inner: fence,
-            device: device as *const ash::Device,
-        }
-    }
-    pub fn wait(&self) {
-        unsafe {
-            while !(*self.device).get_fence_status(self.inner).unwrap() {
-                (*self.device)
-                    .wait_for_fences(&[self.inner], true, u64::MAX)
-                    .unwrap();
-            }
-        }
-    }
-}
-impl Drop for Fence {
-    fn drop(&mut self) {
-        unsafe {
-            self.wait();
-            (*self.device).destroy_fence(self.inner, None);
-        }
-    }
-}
+
 pub struct CommandEncoder<'a> {
     pub command_buffer: vk::CommandBuffer,
     queue: vk::Queue,
     fence: RefCell<Option<Rc<Fence>>>,
     device: &'a ash::Device,
+    wait_semaphores: RefCell<Vec<vk::Semaphore>>,
+    signal_semaphores: RefCell<Vec<vk::Semaphore>>,
 }
 impl<'a> CommandEncoder<'a> {
     pub fn new(
@@ -530,6 +505,8 @@ impl<'a> CommandEncoder<'a> {
             queue,
             fence: RefCell::new(None),
             device,
+            signal_semaphores: RefCell::new(vec![]),
+            wait_semaphores: RefCell::new(vec![]),
         }
     }
     pub fn get_fence(&self) -> Rc<Fence> {
@@ -548,12 +525,26 @@ impl<'a> CommandEncoder<'a> {
             }
         }
     }
+    pub fn wait_semaphore(&self, semaphore:vk::Semaphore){
+        let mut wait_semaphores = self.wait_semaphores.borrow_mut();
+        wait_semaphores.push(semaphore);
+    }
+    pub fn signal_semaphore(&self, semaphore:vk::Semaphore){
+        let mut signal_semaphores = self.wait_semaphores.borrow_mut();
+        signal_semaphores.push(semaphore);
+    }
 }
 impl<'a> Drop for CommandEncoder<'a> {
     fn drop(&mut self) {
         unsafe {
             let cbs = [self.command_buffer];
-            let submit_info = vk::SubmitInfo::builder().command_buffers(&cbs).build();
+            let wait_semaphores = self.wait_semaphores.borrow();
+            let signal_semaphores = self.signal_semaphores.borrow();
+            let submit_info = vk::SubmitInfo::builder()
+                .command_buffers(&cbs)
+                .wait_semaphores(&wait_semaphores)
+                .signal_semaphores(&signal_semaphores)
+                .build();
             self.device.end_command_buffer(self.command_buffer).unwrap();
             let fence = self.fence.borrow();
             self.device

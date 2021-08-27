@@ -147,8 +147,10 @@ pub mod ctx;
 pub mod kernel;
 pub mod profile;
 pub mod resource;
+pub mod sync;
 
 pub use ctx::*;
 pub use kernel::*;
 pub use profile::*;
 pub use resource::*;
+pub use sync::*;
