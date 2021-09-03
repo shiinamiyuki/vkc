@@ -52,7 +52,7 @@ impl Drop for SemaphoreInner {
     }
 }
 impl SemaphoreInner {
-    fn wait(&self, values: &[(vk::Semaphore, u64)], timeout: u64) {
+    fn wait(&self, values: &[(vk::Semaphore, u64)], timeout: u64) -> bool {
         unsafe {
             let device = &self.ctx.device;
             let wait_semaphores: Vec<_> = values.iter().map(|x| x.0).collect();
@@ -61,7 +61,13 @@ impl SemaphoreInner {
                 .semaphores(&wait_semaphores)
                 .values(&wait_values)
                 .build();
-            device.wait_semaphores(&wait_info, timeout).unwrap();
+            match device.wait_semaphores(&wait_info, timeout) {
+                Ok(_) => true,
+                Err(e) => match e {
+                    vk::Result::TIMEOUT => false,
+                    _ => panic!("{}", e),
+                },
+            }
         }
     }
     fn signal(&self, value: u64) {
@@ -82,10 +88,10 @@ impl Semaphore {
     pub fn handle(&self) -> vk::Semaphore {
         self.inner.handle
     }
-    fn wait(&self, values: &[(vk::Semaphore, u64)], timeout: u64) {
+    pub fn wait(&self, values: &[(vk::Semaphore, u64)], timeout: u64) -> bool {
         self.inner.wait(values, timeout)
     }
-    fn signal(&self, value: u64) {
+    pub fn signal(&self, value: u64) {
         self.inner.signal(value)
     }
     pub fn new(ctx: &Context) -> Self {
@@ -117,7 +123,7 @@ pub struct TimePoint {
     value: u64,
 }
 impl TimePoint {
-    pub fn wait(&self, timeout: u64) {
+    pub fn wait(&self, timeout: u64) -> bool {
         self.semaphore
             .wait(&[(self.semaphore.handle, self.value)], timeout)
     }

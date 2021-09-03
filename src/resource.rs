@@ -492,11 +492,13 @@ fn end_command_buffer(command_buffer: vk::CommandBuffer, ctx: &Context) {
         }
     }
 }
-fn transition_image_layout(
+pub fn transition_image_layout(
     image: vk::Image,
     format: vk::Format,
     old_layout: vk::ImageLayout,
     new_layout: vk::ImageLayout,
+    src_stage_mask: vk::PipelineStageFlags,
+    dst_stage_mask: vk::PipelineStageFlags,
     command_buffer: vk::CommandBuffer,
     ctx: &Context,
 ) {
@@ -519,8 +521,7 @@ fn transition_image_layout(
                 vk::AccessFlags::TRANSFER_WRITE,
                 vk::AccessFlags::SHADER_READ,
                 vk::PipelineStageFlags::TRANSFER,
-                vk::PipelineStageFlags::COMPUTE_SHADER
-                    | vk::PipelineStageFlags::RAY_TRACING_SHADER_NV,
+                dst_stage_mask,
             )
         } else {
             panic!("unsupported layout transition");
@@ -556,7 +557,7 @@ fn transition_image_layout(
         end_command_buffer(command_buffer, ctx);
     }
 }
-fn copy_buffer_to_image(
+pub fn copy_buffer_to_image(
     buffer: vk::Buffer,
     buffer_offset: vk::DeviceSize,
     image: vk::Image,
@@ -677,6 +678,8 @@ impl Image {
                 format,
                 vk::ImageLayout::UNDEFINED,
                 vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+                vk::PipelineStageFlags::TOP_OF_PIPE,
+                vk::PipelineStageFlags::TRANSFER,
                 command_buffer,
                 ctx,
             );
@@ -694,6 +697,8 @@ impl Image {
                 format,
                 vk::ImageLayout::TRANSFER_DST_OPTIMAL,
                 vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+                vk::PipelineStageFlags::TRANSFER,
+                vk::PipelineStageFlags::BOTTOM_OF_PIPE,
                 command_buffer,
                 ctx,
             );
