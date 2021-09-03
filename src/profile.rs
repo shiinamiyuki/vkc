@@ -117,9 +117,9 @@ impl Profiler {
         }
         self.query_counter = 0;
     }
-    pub fn profile<'a, F: FnOnce() -> ()>(
+    pub fn profile<F: FnOnce() -> ()>(
         &mut self,
-        cmd_encoder: &crate::CommandEncoder<'a>,
+        cmd_encoder: &crate::CommandEncoder,
         kernel_name: &str,
         // stage: vk::PipelineStageFlags,
         f: F,

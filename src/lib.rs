@@ -1,9 +1,14 @@
 use ash::vk;
 #[cfg(test)]
 mod tests {
+    use std::{cell::RefCell, rc::Rc};
+
     use ash::vk;
 
-    use crate::{align_to, Context, ContextCreateInfo, Extension, Profiler, TBuffer};
+    use crate::{
+        align_to, Context, ContextCreateInfo, Extension, Profiler, TBuffer, TaskGraph,
+        TaskGraphBuilder,
+    };
     #[test]
     fn test_profiler() {
         let ctx = Context::new(ContextCreateInfo {
@@ -119,6 +124,46 @@ mod tests {
             buffers.push(buffer);
         }
     }
+    #[test]
+    fn test_task_graph() {
+        let ctx = Context::new(ContextCreateInfo {
+            enabled_extensions: &[],
+            enable_validation: true,
+        });
+        let graph = {
+            let mut builder = TaskGraph::builder();
+            let list: Rc<RefCell<Vec<i32>>> = Rc::new(RefCell::new(vec![]));
+            let task1 = {
+                let list = list.clone();
+                builder.add(&[], move |_| {
+                    let mut list = (*list).borrow_mut();
+                    list.push(0);
+                })
+            };
+            let task2 = {
+                let list = list.clone();
+                builder.add(&[], move |_| {
+                    let mut list = (*list).borrow_mut();
+                    list.push(1);
+                })
+            };
+            let task3 = {
+                let list = list.clone();
+                builder.add(&[&task1], move |_| {
+                    let mut list = (*list).borrow_mut();
+                    list.push(2);
+                })
+            };
+            let task4 = {
+                let list = list.clone();
+                builder.add(&[&task2, &task3], move |_| {
+                    let mut list = (*list).borrow_mut();
+                    list.push(3);
+                })
+            };
+            builder.build()
+        };
+    }
 }
 
 fn align_to(x: vk::DeviceSize, alignment: vk::DeviceSize) -> u64 {
@@ -148,9 +193,11 @@ pub mod kernel;
 pub mod profile;
 pub mod resource;
 pub mod sync;
+pub mod task;
 
 pub use ctx::*;
 pub use kernel::*;
 pub use profile::*;
 pub use resource::*;
 pub use sync::*;
+pub use task::*;

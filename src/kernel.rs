@@ -480,23 +480,23 @@ fn create_descriptor_set(
     }
 }
 
-pub struct CommandEncoder<'a> {
+pub struct CommandEncoder{
     pub command_buffer: vk::CommandBuffer,
     queue: vk::Queue,
     fence: RefCell<Option<Rc<Fence>>>,
-    device: &'a ash::Device,
+    ctx:Context,
     wait_semaphores: RefCell<Vec<vk::Semaphore>>,
     signal_semaphores: RefCell<Vec<vk::Semaphore>>,
 }
-impl<'a> CommandEncoder<'a> {
+impl CommandEncoder {
     pub fn new(
-        device: &'a ash::Device,
+        ctx:&Context,
         command_buffer: vk::CommandBuffer,
         queue: vk::Queue,
         begin_info: &vk::CommandBufferBeginInfo,
     ) -> Self {
         unsafe {
-            device
+            ctx.device
                 .begin_command_buffer(command_buffer, begin_info)
                 .unwrap();
         }
@@ -504,7 +504,7 @@ impl<'a> CommandEncoder<'a> {
             command_buffer,
             queue,
             fence: RefCell::new(None),
-            device,
+            ctx:ctx.clone(),
             signal_semaphores: RefCell::new(vec![]),
             wait_semaphores: RefCell::new(vec![]),
         }
@@ -516,10 +516,10 @@ impl<'a> CommandEncoder<'a> {
         } else {
             unsafe {
                 *fence = Some(Rc::new(Fence::new(
-                    self.device
+                    self.ctx.device
                         .create_fence(&vk::FenceCreateInfo::default(), None)
                         .unwrap(),
-                    &self.device,
+                    &self.ctx.device,
                 )));
                 (*fence).clone().unwrap().clone()
             }
@@ -534,7 +534,7 @@ impl<'a> CommandEncoder<'a> {
         signal_semaphores.push(semaphore);
     }
 }
-impl<'a> Drop for CommandEncoder<'a> {
+impl Drop for CommandEncoder {
     fn drop(&mut self) {
         unsafe {
             let cbs = [self.command_buffer];
@@ -545,9 +545,9 @@ impl<'a> Drop for CommandEncoder<'a> {
                 .wait_semaphores(&wait_semaphores)
                 .signal_semaphores(&signal_semaphores)
                 .build();
-            self.device.end_command_buffer(self.command_buffer).unwrap();
+            self.ctx.device.end_command_buffer(self.command_buffer).unwrap();
             let fence = self.fence.borrow();
-            self.device
+            self.ctx.device
                 .queue_submit(
                     self.queue,
                     &[submit_info],
@@ -557,7 +557,7 @@ impl<'a> Drop for CommandEncoder<'a> {
         }
     }
 }
-impl<'a> std::ops::Deref for CommandEncoder<'a> {
+impl std::ops::Deref for CommandEncoder {
     type Target = vk::CommandBuffer;
     fn deref(&self) -> &Self::Target {
         &self.command_buffer
@@ -871,7 +871,7 @@ impl Kernel {
     }
     pub fn cmd_trace_rays<'a, T: bytemuck::Pod>(
         &self,
-        command_encoder: &CommandEncoder<'a>,
+        command_encoder: &CommandEncoder,
         raygen_sbt: SbtRecord,
         miss_sbt: SbtRecord,
         hit_sbt: SbtRecord,
@@ -946,9 +946,9 @@ impl Kernel {
         }
     }
 
-    pub fn cmd_dispatch<'a, T: bytemuck::Pod>(
+    pub fn cmd_dispatch<T: bytemuck::Pod>(
         &self,
-        command_encoder: &CommandEncoder<'a>,
+        command_encoder: &CommandEncoder,
         group_count_x: u32,
         group_count_y: u32,
         group_count_z: u32,
@@ -1017,9 +1017,9 @@ impl RayTracingKernel {
             imp: RefCell::new(None),
         }
     }
-    pub fn cmd_trace_rays<'a, T: bytemuck::Pod>(
+    pub fn cmd_trace_rays<T: bytemuck::Pod>(
         &self,
-        command_encoder: &CommandEncoder<'a>,
+        command_encoder: &CommandEncoder,
         raygen_sbt: SbtRecord,
         miss_sbt: SbtRecord,
         hit_sbt: SbtRecord,
@@ -1081,9 +1081,9 @@ impl ComputeKernel {
             ctx: ctx.clone(),
         }
     }
-    pub fn cmd_dispatch<'a, T: bytemuck::Pod>(
+    pub fn cmd_dispatch<T: bytemuck::Pod>(
         &self,
-        command_encoder: &CommandEncoder<'a>,
+        command_encoder: &CommandEncoder,
         group_count_x: u32,
         group_count_y: u32,
         group_count_z: u32,

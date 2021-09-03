@@ -3,7 +3,6 @@ use std::sync::{atomic::AtomicU64, Arc};
 use ash::vk;
 
 use crate::{CommandEncoder, Context};
-
 pub struct Fence {
     pub(crate) inner: vk::Fence,
     device: *const ash::Device,
@@ -63,7 +62,7 @@ impl Event {
             device.signal_semaphore(&signal_info).unwrap();
         }
     }
-    pub fn wait(&self, timeout: u64) {
+    pub fn wait(&self, timeout: u64) -> bool {
         unsafe {
             let device = &self.inner.ctx.device;
             let wait_semaphores = [self.inner.handle];
@@ -72,7 +71,13 @@ impl Event {
                 .semaphores(&wait_semaphores)
                 .values(&wait_values)
                 .build();
-            device.wait_semaphores(&wait_info, timeout).unwrap();
+            match device.wait_semaphores(&wait_info, timeout) {
+                Ok(_) => true,
+                Err(e) => match e {
+                    vk::Result::TIMEOUT => false,
+                    _ => panic!("{}", e),
+                },
+            }
         }
     }
 }
@@ -82,9 +87,9 @@ impl Drop for Event {
     }
 }
 
-struct SemaphoreInner {
-    handle: vk::Semaphore,
-    timeline: AtomicU64,
+pub(crate) struct SemaphoreInner {
+    pub(crate) handle: vk::Semaphore,
+    pub(crate) timeline: AtomicU64,
     ctx: Context,
 }
 impl Drop for SemaphoreInner {
@@ -97,7 +102,7 @@ impl Drop for SemaphoreInner {
     }
 }
 pub struct Semaphore {
-    inner: Arc<SemaphoreInner>,
+    pub(crate) inner: Arc<SemaphoreInner>,
 }
 impl Semaphore {
     pub fn handle(&self) -> vk::Semaphore {
