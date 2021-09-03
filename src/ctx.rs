@@ -133,6 +133,7 @@ pub struct ContextInner {
 pub enum Extension {
     ShaderAtomicFloat,
     ExternalMemory,
+    // TimelineSemaphore, // Default enabled
 }
 pub struct ContextCreateInfo<'a> {
     pub enabled_extensions: &'a [Extension],
@@ -281,7 +282,9 @@ impl ContextInner {
                 .shader_buffer_float32_atomic_add(true)
                 .shader_buffer_float32_atomics(true)
                 .build();
-
+            let mut timeline_semaphore = vk::PhysicalDeviceTimelineSemaphoreFeatures::builder()
+                .timeline_semaphore(true)
+                .build();
             let device_create_info = {
                 let mut builder = vk::DeviceCreateInfo::builder()
                     .queue_create_infos(&queue_info)
@@ -297,6 +300,12 @@ impl ContextInner {
                 {
                     builder = builder.push_next(&mut shader_atomic_float);
                 }
+                // if info
+                //     .enabled_extensions
+                //     .contains(&Extension::TimelineSemaphore)
+                // {
+                    builder = builder.push_next(&mut timeline_semaphore);
+                // }
                 builder.build()
             };
 

@@ -480,13 +480,18 @@ fn create_descriptor_set(
     }
 }
 
+#[derive(Clone, Copy)]
+struct SemaphoreSyncRecord {
+    semaphore: vk::Semaphore,
+    value: Option<u64>,
+}
 pub struct CommandEncoder<'a> {
     pub command_buffer: vk::CommandBuffer,
     queue: vk::Queue,
     fence: RefCell<Option<Rc<Fence>>>,
     device: &'a ash::Device,
-    wait_semaphores: RefCell<Vec<vk::Semaphore>>,
-    signal_semaphores: RefCell<Vec<vk::Semaphore>>,
+    wait_semaphores: RefCell<Vec<SemaphoreSyncRecord>>,
+    signal_semaphores: RefCell<Vec<SemaphoreSyncRecord>>,
 }
 impl<'a> CommandEncoder<'a> {
     pub fn new(
@@ -525,25 +530,61 @@ impl<'a> CommandEncoder<'a> {
             }
         }
     }
-    pub fn wait_semaphore(&self, semaphore:vk::Semaphore){
+    pub fn wait_binary_semaphore(&self, semaphore: vk::Semaphore) {
         let mut wait_semaphores = self.wait_semaphores.borrow_mut();
-        wait_semaphores.push(semaphore);
+        wait_semaphores.push(SemaphoreSyncRecord {
+            semaphore,
+            value: None,
+        });
     }
-    pub fn signal_semaphore(&self, semaphore:vk::Semaphore){
+    pub fn signal_binary_semaphore(&self, semaphore: vk::Semaphore) {
         let mut signal_semaphores = self.wait_semaphores.borrow_mut();
-        signal_semaphores.push(semaphore);
+        signal_semaphores.push(SemaphoreSyncRecord {
+            semaphore,
+            value: None,
+        });
+    }
+    pub fn wait_semaphore(&self, semaphore: vk::Semaphore, value: u64) {
+        let mut wait_semaphores = self.wait_semaphores.borrow_mut();
+        wait_semaphores.push(SemaphoreSyncRecord {
+            semaphore,
+            value: Some(value),
+        });
+    }
+    pub fn signal_semaphore(&self, semaphore: vk::Semaphore, value: u64) {
+        let mut signal_semaphores = self.wait_semaphores.borrow_mut();
+        signal_semaphores.push(SemaphoreSyncRecord {
+            semaphore,
+            value: Some(value),
+        });
     }
 }
 impl<'a> Drop for CommandEncoder<'a> {
     fn drop(&mut self) {
         unsafe {
+            fn get_semaphore_value_pair(
+                records: &[SemaphoreSyncRecord],
+            ) -> (Vec<vk::Semaphore>, Vec<u64>) {
+                (
+                    records.iter().map(|r| r.semaphore).collect(),
+                    records.iter().map(|r| r.value.unwrap_or(0)).collect(),
+                )
+            }
             let cbs = [self.command_buffer];
             let wait_semaphores = self.wait_semaphores.borrow();
             let signal_semaphores = self.signal_semaphores.borrow();
+
+            let (wait_semaphores, wait_values) = get_semaphore_value_pair(&wait_semaphores);
+            let (signal_semaphores, signal_values) = get_semaphore_value_pair(&signal_semaphores);
+            let mut timeline_info = vk::TimelineSemaphoreSubmitInfo::builder()
+                .wait_semaphore_values(&wait_values)
+                .signal_semaphore_values(&signal_values)
+                .build();
             let submit_info = vk::SubmitInfo::builder()
                 .command_buffers(&cbs)
                 .wait_semaphores(&wait_semaphores)
                 .signal_semaphores(&signal_semaphores)
+                .push_next(&mut timeline_info)
                 .build();
             self.device.end_command_buffer(self.command_buffer).unwrap();
             let fence = self.fence.borrow();

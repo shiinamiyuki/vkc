@@ -37,51 +37,6 @@ impl Drop for Fence {
     }
 }
 
-// different from VkEvent
-// similar to cuda event
-pub struct Event {
-    inner: Arc<SemaphoreInner>,
-    wait_value: u64,
-}
-impl Event {
-    pub fn new(semaphore: &Semaphore) -> Self {
-        Self {
-            inner: semaphore.inner.clone(),
-            wait_value: semaphore
-                .inner
-                .timeline
-                .fetch_add(2, std::sync::atomic::Ordering::SeqCst),
-        }
-    }
-    pub fn signal(&self) {
-        unsafe {
-            let device = &self.inner.ctx.device;
-            let signal_info = vk::SemaphoreSignalInfo::builder()
-                .semaphore(self.inner.handle)
-                .value(self.wait_value + 1)
-                .build();
-            device.signal_semaphore(&signal_info).unwrap();
-        }
-    }
-    pub fn wait(&self, timeout: u64) {
-        unsafe {
-            let device = &self.inner.ctx.device;
-            let wait_semaphores = [self.inner.handle];
-            let wait_values = [self.wait_value];
-            let wait_info = vk::SemaphoreWaitInfo::builder()
-                .semaphores(&wait_semaphores)
-                .values(&wait_values)
-                .build();
-            device.wait_semaphores(&wait_info, timeout).unwrap();
-        }
-    }
-}
-impl Drop for Event {
-    fn drop(&mut self) {
-        self.wait(u64::MAX);
-    }
-}
-
 struct SemaphoreInner {
     handle: vk::Semaphore,
     timeline: AtomicU64,
@@ -96,12 +51,42 @@ impl Drop for SemaphoreInner {
         }
     }
 }
+impl SemaphoreInner {
+    fn wait(&self, values: &[(vk::Semaphore, u64)], timeout: u64) {
+        unsafe {
+            let device = &self.ctx.device;
+            let wait_semaphores: Vec<_> = values.iter().map(|x| x.0).collect();
+            let wait_values: Vec<_> = values.iter().map(|x| x.1).collect();
+            let wait_info = vk::SemaphoreWaitInfo::builder()
+                .semaphores(&wait_semaphores)
+                .values(&wait_values)
+                .build();
+            device.wait_semaphores(&wait_info, timeout).unwrap();
+        }
+    }
+    fn signal(&self, value: u64) {
+        unsafe {
+            let device = &self.ctx.device;
+            let signal_info = vk::SemaphoreSignalInfo::builder()
+                .semaphore(self.handle)
+                .value(value)
+                .build();
+            device.signal_semaphore(&signal_info).unwrap();
+        }
+    }
+}
 pub struct Semaphore {
     inner: Arc<SemaphoreInner>,
 }
 impl Semaphore {
     pub fn handle(&self) -> vk::Semaphore {
         self.inner.handle
+    }
+    fn wait(&self, values: &[(vk::Semaphore, u64)], timeout: u64) {
+        self.inner.wait(values, timeout)
+    }
+    fn signal(&self, value: u64) {
+        self.inner.signal(value)
     }
     pub fn new(ctx: &Context) -> Self {
         let mut type_create_info = vk::SemaphoreTypeCreateInfo::builder()
@@ -125,4 +110,31 @@ impl Semaphore {
             }
         }
     }
+}
+
+pub struct TimePoint {
+    semaphore: Arc<SemaphoreInner>,
+    value: u64,
+}
+impl TimePoint {
+    pub fn wait(&self, timeout: u64) {
+        self.semaphore
+            .wait(&[(self.semaphore.handle, self.value)], timeout)
+    }
+    pub fn signal(&self) {
+        self.semaphore.signal(self.value)
+    }
+}
+
+pub fn create_timeline(semaphore: &Semaphore, n_timepoints: u64) -> Vec<TimePoint> {
+    let value = semaphore
+        .inner
+        .timeline
+        .fetch_add(n_timepoints, std::sync::atomic::Ordering::SeqCst);
+    (0..value)
+        .map(|v| TimePoint {
+            semaphore: semaphore.inner.clone(),
+            value: v,
+        })
+        .collect()
 }
