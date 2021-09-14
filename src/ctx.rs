@@ -10,6 +10,7 @@ use std::{
 use ash::{
     extensions::{
         ext::{DebugReport, DebugUtils},
+        khr::Swapchain,
         nv::RayTracing,
     },
     vk, Entry,
@@ -135,12 +136,16 @@ pub enum Extension {
     ExternalMemory,
     // TimelineSemaphore, // Default enabled
 }
+
 pub struct ContextCreateInfo<'a> {
     pub enabled_extensions: &'a [Extension],
     pub enable_validation: bool,
 }
 impl ContextInner {
-    pub fn new(info: ContextCreateInfo<'_>) -> Self {
+    fn new_1(
+        info: ContextCreateInfo<'_>,
+        window: Option<&dyn raw_window_handle::HasRawWindowHandle>,
+    ) -> Self {
         unsafe {
             // let hidpi_factor: f64 = window.get_hidpi_factor();
             // let physical_dimensions = logical_dimensions.to_physical(hidpi_factor);
@@ -159,6 +164,9 @@ impl ContextInner {
                 .collect();
 
             let extension_names_raw = extension_names();
+            if window.is_some() {
+                let surface_extensions = ash_window::enumerate_required_extensions(window.unwrap()).unwrap();
+            }
 
             let appinfo = vk::ApplicationInfo::builder()
                 .application_name(&app_name)
@@ -242,6 +250,9 @@ impl ContextInner {
                 // vk::ExtShaderAtomicFloatFn::name().as_ptr(),
                 // vk::KhrExternalMemoryWin32Fn::name().as_ptr(),
             ];
+            if window.is_some() {
+                device_extension_names_raw.push(Swapchain::name().as_ptr());
+            }
             if info
                 .enabled_extensions
                 .contains(&Extension::ShaderAtomicFloat)
@@ -304,7 +315,7 @@ impl ContextInner {
                 //     .enabled_extensions
                 //     .contains(&Extension::TimelineSemaphore)
                 // {
-                    builder = builder.push_next(&mut timeline_semaphore);
+                builder = builder.push_next(&mut timeline_semaphore);
                 // }
                 builder.build()
             };
@@ -487,9 +498,20 @@ impl Drop for ContextInner {
 //     }
 // }
 impl Context {
-    pub fn new(info: ContextCreateInfo<'_>) -> Self {
+    pub fn new_compute_only(info: ContextCreateInfo<'_>) -> Self {
         let ctx = Self {
-            inner: Arc::new(ContextInner::new(info)),
+            inner: Arc::new(ContextInner::new_1(info, None)),
+        };
+        let allocator = GPUAllocator::new(&ctx);
+        {
+            let mut a = ctx.inner.allocator.write().unwrap();
+            *a = Some(allocator);
+        }
+        ctx
+    }
+    pub fn new_graphics(info: ContextCreateInfo<'_>, window: &dyn raw_window_handle::HasRawWindowHandle) -> Self {
+        let ctx = Self {
+            inner: Arc::new(ContextInner::new_1(info, Some(window))),
         };
         let allocator = GPUAllocator::new(&ctx);
         {

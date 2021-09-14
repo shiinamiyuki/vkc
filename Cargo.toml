@@ -7,4 +7,6 @@ edition = "2018"
 
 [dependencies]
 ash = "*"
+ash-window = "*"
+raw-window-handle = "0.3.3"
 bytemuck = {version = "1.7.*", features=["derive"]}

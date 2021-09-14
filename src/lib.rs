@@ -6,7 +6,7 @@ mod tests {
     use crate::{align_to, Context, ContextCreateInfo, Extension, Profiler, TBuffer};
     #[test]
     fn test_profiler() {
-        let ctx = Context::new(ContextCreateInfo {
+        let ctx = Context::new_compute_only(ContextCreateInfo {
             enabled_extensions: &[],
             enable_validation: true,
         });
@@ -19,7 +19,7 @@ mod tests {
     }
     #[test]
     fn test_buffer_clone() {
-        let ctx = Context::new(ContextCreateInfo {
+        let ctx = Context::new_compute_only(ContextCreateInfo {
             enabled_extensions: &[],
             enable_validation: true,
         });
@@ -54,7 +54,7 @@ mod tests {
     #[test]
     #[cfg(target_os = "windows")]
     fn test_ext_mem_create() {
-        let ctx = Context::new(ContextCreateInfo {
+        let ctx = Context::new_compute_only(ContextCreateInfo {
             enabled_extensions: &[Extension::ExternalMemory],
             enable_validation: true,
         });
@@ -71,7 +71,7 @@ mod tests {
 
     #[test]
     fn test_buffer_map() {
-        let ctx = Context::new(ContextCreateInfo {
+        let ctx = Context::new_compute_only(ContextCreateInfo {
             enabled_extensions: &[],
             enable_validation: true,
         });
@@ -103,7 +103,7 @@ mod tests {
     }
     #[test]
     fn test_buffer_alloc() {
-        let ctx = Context::new(ContextCreateInfo {
+        let ctx = Context::new_compute_only(ContextCreateInfo {
             enabled_extensions: &[],
             enable_validation: true,
         });
