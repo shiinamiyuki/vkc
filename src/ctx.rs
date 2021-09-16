@@ -10,11 +10,12 @@ use std::{
 use ash::{
     extensions::{
         ext::{DebugReport, DebugUtils},
-        khr::Swapchain,
+        khr::{Surface, Swapchain},
         nv::RayTracing,
     },
     vk, Entry,
 };
+use ash_window::create_surface;
 
 use crate::allocator::GPUAllocator;
 
@@ -98,7 +99,7 @@ pub struct ContextInner {
     pub device: ash::Device,
     pub extensions: Vec<Extension>,
     pub pipeline_cache: vk::PipelineCache,
-    // pub surface_loader: Surface,
+    pub surface_loader: Option<Surface>,
     // pub swapchain_loader: Swapchain,
     // pub debug_report_loader: DebugReport,
     // pub window: winit::Window,
@@ -163,9 +164,14 @@ impl ContextInner {
                 .map(|raw_name| raw_name.as_ptr())
                 .collect();
 
-            let extension_names_raw = extension_names();
-            if window.is_some() {
-                let surface_extensions = ash_window::enumerate_required_extensions(window.unwrap()).unwrap();
+            let mut extension_names_raw = extension_names();
+            let surface_extensions = if window.is_some() {
+                ash_window::enumerate_required_extensions(window.unwrap()).unwrap()
+            } else {
+                vec![]
+            };
+            for e in &surface_extensions {
+                extension_names_raw.push(e.as_ptr());
             }
 
             let appinfo = vk::ApplicationInfo::builder()
@@ -212,11 +218,13 @@ impl ContextInner {
             let debug_call_back = debug_utils_loader
                 .create_debug_utils_messenger(&debug_info, None)
                 .unwrap();
-            // let surface = create_surface(&entry, &instance, &window).unwrap();
+
             let pdevices = instance
                 .enumerate_physical_devices()
                 .expect("Physical device error");
-            // let surface_loader = Surface::new(&entry, &instance);
+            let surface =
+                window.map(|window| create_surface(&entry, &instance, window, None).unwrap());
+            let surface_loader = window.map(|_| Surface::new(&entry, &instance));
             let (pdevice, queue_family_index) = pdevices
                 .iter()
                 .map(|pdevice| {
@@ -225,10 +233,19 @@ impl ContextInner {
                         .iter()
                         .enumerate()
                         .filter_map(|(index, ref info)| {
-                            let supports_graphic_and_surface = info
-                                .queue_flags
-                                .contains(vk::QueueFlags::GRAPHICS | vk::QueueFlags::COMPUTE);
-                            match supports_graphic_and_surface {
+                            let supports = if window.is_some() {
+                                info.queue_flags.contains(vk::QueueFlags::GRAPHICS)
+                                    && surface_loader.as_ref().unwrap()
+                                        .get_physical_device_surface_support(
+                                            *pdevice,
+                                            index as u32,
+                                            surface.unwrap(),
+                                        )
+                                        .unwrap()
+                            } else {
+                                info.queue_flags.contains(vk::QueueFlags::COMPUTE)
+                            };
+                            match supports {
                                 true => Some((*pdevice, index)),
                                 _ => None,
                             }
@@ -436,7 +453,7 @@ impl ContextInner {
                 device_memory_properties,
                 extensions: info.enabled_extensions.iter().map(|x| *x).collect(),
                 // window,
-                // surface_loader,
+                surface_loader,
                 // surface_format,
                 // present_queue,
                 // surface_resolution,
@@ -509,7 +526,10 @@ impl Context {
         }
         ctx
     }
-    pub fn new_graphics(info: ContextCreateInfo<'_>, window: &dyn raw_window_handle::HasRawWindowHandle) -> Self {
+    pub fn new_graphics(
+        info: ContextCreateInfo<'_>,
+        window: &dyn raw_window_handle::HasRawWindowHandle,
+    ) -> Self {
         let ctx = Self {
             inner: Arc::new(ContextInner::new_1(info, Some(window))),
         };
