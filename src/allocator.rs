@@ -1,8 +1,7 @@
 use ash::vk;
-use std::cell::RefCell;
+use std::{cell::RefCell, sync::Arc};
 use std::collections::BTreeSet;
 use std::ffi::c_void;
-use std::rc::{Rc, Weak};
 
 use crate::{Context, align_to, default_memory_handle_type};
 
@@ -52,10 +51,10 @@ impl Drop for MemoryObject {
         }
     }
 }
-pub type GPUAllocatorPtr = Rc<RefCell<GPUAllocator>>;
+pub type GPUAllocatorPtr = Arc<RefCell<GPUAllocator>>;
 #[derive(Clone)]
 pub struct MemoryBlock {
-    pub alloc_obj: Rc<MemoryObject>,
+    pub alloc_obj: Arc<MemoryObject>,
     pub capacity: vk::DeviceSize,
     pub offset: vk::DeviceSize, // [offset..offset+size] is used
     pub start: vk::DeviceSize,  // this is the begining of this block
@@ -170,7 +169,7 @@ impl GPUAllocator {
             );
             let size = obj.size;
             let block = MemoryBlock {
-                alloc_obj: Rc::new(obj),
+                alloc_obj: Arc::new(obj),
                 size,
                 start: 0,
                 offset: 0,
