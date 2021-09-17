@@ -93,6 +93,23 @@ unsafe extern "system" fn vulkan_debug_callback(
 //     println!("{:?}", CStr::from_ptr(p_message));
 //     vk::FALSE
 // }
+#[derive(Clone)]
+pub struct AllocationCallbacks {
+    p_callback: *const vk::AllocationCallbacks,
+}
+impl AllocationCallbacks {
+    pub fn null() -> Self {
+        Self {
+            p_callback: std::ptr::null(),
+        }
+    }
+    pub fn as_ref(&self) -> Option<&vk::AllocationCallbacks> {
+        unsafe { self.p_callback.as_ref() }
+    }
+}
+unsafe impl Sync for AllocationCallbacks {}
+unsafe impl Send for AllocationCallbacks {}
+
 pub struct ContextInner {
     pub entry: Entry,
     pub instance: ash::Instance,
@@ -126,7 +143,7 @@ pub struct ContextInner {
 
     // pub window_width: u32,
     // pub window_height: u32,
-    pub allocation_callbacks: *const vk::AllocationCallbacks,
+    pub allocation_callbacks: AllocationCallbacks,
     pub limits: vk::PhysicalDeviceLimits,
     pub allocator: RwLock<Option<GPUAllocator>>,
 }
@@ -235,7 +252,9 @@ impl ContextInner {
                         .filter_map(|(index, ref info)| {
                             let supports = if window.is_some() {
                                 info.queue_flags.contains(vk::QueueFlags::GRAPHICS)
-                                    && surface_loader.as_ref().unwrap()
+                                    && surface_loader
+                                        .as_ref()
+                                        .unwrap()
                                         .get_physical_device_surface_support(
                                             *pdevice,
                                             index as u32,
@@ -469,7 +488,7 @@ impl ContextInner {
                 debug_call_back,
                 debug_utils_loader,
                 pipeline_cache,
-                allocation_callbacks: std::ptr::null(),
+                allocation_callbacks: AllocationCallbacks::null(),
                 limits,
                 allocator: RwLock::new(None),
                 // window_width: physical_dimensions.width as u32,
@@ -555,7 +574,7 @@ pub fn create_descriptor_set_from_storage_buffers(
     descriptor_pool: vk::DescriptorPool,
     buffers: &[vk::Buffer],
     stage: vk::ShaderStageFlags,
-    allocation_callbacks: *const vk::AllocationCallbacks,
+    allocation_callbacks: AllocationCallbacks,
 ) -> (vk::DescriptorSetLayout, vk::DescriptorSet) {
     unsafe {
         let flags = vec![vk::DescriptorBindingFlagsEXT::empty(); buffers.len()];
