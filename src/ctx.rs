@@ -150,6 +150,7 @@ pub struct ContextInner {
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Extension {
+    RayTracing,
     ShaderAtomicFloat,
     ExternalMemory,
     // TimelineSemaphore, // Default enabled
@@ -278,7 +279,7 @@ impl ContextInner {
 
             let mut device_extension_names_raw = vec![
                 // Swapchain::name().as_ptr(),
-                RayTracing::name().as_ptr(),
+                // RayTracing::name().as_ptr(),
                 vk::ExtDescriptorIndexingFn::name().as_ptr(),
                 vk::ExtScalarBlockLayoutFn::name().as_ptr(),
                 vk::KhrGetMemoryRequirements2Fn::name().as_ptr(),
@@ -294,6 +295,9 @@ impl ContextInner {
                 .contains(&Extension::ShaderAtomicFloat)
             {
                 device_extension_names_raw.push(vk::ExtShaderAtomicFloatFn::name().as_ptr());
+            }
+            if info.enabled_extensions.contains(&Extension::RayTracing) {
+                device_extension_names_raw.push(RayTracing::name().as_ptr());
             }
             if info.enabled_extensions.contains(&Extension::ExternalMemory) {
                 device_extension_names_raw.push(vk::KhrExternalMemoryWin32Fn::name().as_ptr());
