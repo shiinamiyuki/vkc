@@ -130,7 +130,7 @@ pub struct ContextInner {
     pub queue_family_index: u32,
     pub queue: vk::Queue,
 
-    // pub surface: vk::SurfaceKHR,
+    pub surface: Option<vk::SurfaceKHR>,
     // pub surface_format: vk::SurfaceFormatKHR,
     // pub surface_resolution: vk::Extent2D,
 
@@ -484,7 +484,7 @@ impl ContextInner {
                 // command_buffer,
                 // present_complete_semaphore,
                 // rendering_complete_semaphore,
-                // surface,
+                surface,
                 debug_call_back,
                 debug_utils_loader,
                 pipeline_cache,
