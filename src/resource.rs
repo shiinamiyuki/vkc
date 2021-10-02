@@ -754,7 +754,7 @@ pub struct Sampler {
     ctx: Context,
 }
 impl Sampler {
-    pub fn new(ctx: &Context) -> Self {
+    pub fn default_sampler(ctx: &Context) -> Self {
         let props = unsafe { ctx.instance.get_physical_device_properties(ctx.pdevice) };
         let info = vk::SamplerCreateInfo::builder()
             .mag_filter(vk::Filter::LINEAR)
@@ -773,9 +773,12 @@ impl Sampler {
             .max_lod(0.0)
             .min_lod(0.0)
             .build();
+        Self::new(ctx, info )
+    }
+    pub fn new(ctx: &Context, create_info: vk::SamplerCreateInfo) -> Self {
         let sampler = unsafe {
             ctx.device
-                .create_sampler(&info, ctx.allocation_callbacks.as_ref())
+                .create_sampler(&create_info, ctx.allocation_callbacks.as_ref())
         }
         .unwrap();
         Self {

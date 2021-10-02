@@ -40,7 +40,8 @@ pub enum Binding {
     StorageBuffer(vk::Buffer),
     UniformBuffer(vk::Buffer),
     Sampler(vk::Sampler),
-    // StorageImage(vk::ImageView)
+    StorageImage(vk::ImageView, vk::ImageLayout),
+    SampledImage(vk::ImageView, vk::ImageLayout),
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 enum BindingType {
@@ -48,6 +49,7 @@ enum BindingType {
     UniformBuffer,
     AccelerationStructure,
     SampledImage,
+    StorageImage,
     Sampler,
 }
 
@@ -66,6 +68,8 @@ fn get_layout(set: &Set) -> SetLayout {
                     Binding::UniformBuffer(_x) => BindingType::UniformBuffer,
                     Binding::AccelerationStructure(_x) => BindingType::AccelerationStructure,
                     Binding::Sampler(_) => BindingType::Sampler,
+                    Binding::StorageImage(_, _) => BindingType::StorageImage,
+                    Binding::SampledImage(_, _) => BindingType::SampledImage,
                 })
                 .collect(),
         ),
@@ -265,6 +269,8 @@ fn create_descriptor_set_layout(
                             vk::DescriptorType::ACCELERATION_STRUCTURE_NV
                         }
                         Binding::Sampler(_) => vk::DescriptorType::SAMPLER,
+                        Binding::SampledImage(..) => vk::DescriptorType::SAMPLED_IMAGE,
+                        Binding::StorageImage(..) => vk::DescriptorType::STORAGE_IMAGE,
                     };
                     vk::DescriptorSetLayoutBinding::builder()
                         .binding(i as u32)
@@ -356,6 +362,34 @@ fn create_descriptor_set(
                 )?[0];
                 for i in 0..bindings.len() {
                     match bindings[i] {
+                        Binding::StorageImage(image, layout) => {
+                            let info = [vk::DescriptorImageInfo::builder()
+                                .image_view(image)
+                                .image_layout(layout)
+                                .build()];
+                            let write = vk::WriteDescriptorSet::builder()
+                                .dst_set(descriptor_set)
+                                .dst_binding(i as u32)
+                                .dst_array_element(0)
+                                .descriptor_type(vk::DescriptorType::SAMPLER)
+                                .image_info(&info)
+                                .build();
+                            device.update_descriptor_sets(&[write], &[]);
+                        }
+                        Binding::SampledImage(image, layout) => {
+                            let info = [vk::DescriptorImageInfo::builder()
+                                .image_view(image)
+                                .image_layout(layout)
+                                .build()];
+                            let write = vk::WriteDescriptorSet::builder()
+                                .dst_set(descriptor_set)
+                                .dst_binding(i as u32)
+                                .dst_array_element(0)
+                                .descriptor_type(vk::DescriptorType::SAMPLER)
+                                .image_info(&info)
+                                .build();
+                            device.update_descriptor_sets(&[write], &[]);
+                        }
                         Binding::Sampler(sampler) => {
                             let info =
                                 [vk::DescriptorImageInfo::builder().sampler(sampler).build()];
