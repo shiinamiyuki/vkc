@@ -5,7 +5,7 @@ Simple wrapper for Vulkan compute pipeline
 ## Example
 
 ```rust
-ue vkc::{Context, include_spv,resource::TBuffer};
+use vkc::{Context, include_spv,resource::TBuffer};
 let Context::new_compute_only(vkc::ContextCreateInfo {
     enable_validation: true,
     enabled_extensions: &[],
