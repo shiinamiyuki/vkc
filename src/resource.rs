@@ -561,8 +561,7 @@ pub fn copy_buffer_to_image(
     buffer: vk::Buffer,
     buffer_offset: vk::DeviceSize,
     image: vk::Image,
-    width: u32,
-    height: u32,
+    extent: vk::Extent3D,
     command_buffer: vk::CommandBuffer,
     ctx: &Context,
 ) {
@@ -580,11 +579,7 @@ pub fn copy_buffer_to_image(
                 .build(),
         )
         .image_offset(vk::Offset3D { x: 0, y: 0, z: 0 })
-        .image_extent(vk::Extent3D {
-            width,
-            height,
-            depth: 1,
-        })
+        .image_extent(extent)
         .build();
     unsafe {
         ctx.device.cmd_copy_buffer_to_image(
@@ -606,7 +601,29 @@ pub struct Image {
     pub mem_req: vk::MemoryRequirements,
 }
 impl Image {
-    pub fn from_data(ctx: &Context, data: &[u8], extent: vk::Extent2D, format: vk::Format) -> Self {
+    pub fn from_data_2d(ctx: &Context, data: &[u8], extent: vk::Extent2D, format: vk::Format) -> Self {
+        Self::from_data_(
+            ctx,
+            data,
+            vk::Extent3D {
+                width: extent.width,
+                height: extent.height,
+                depth: 1,
+            },
+            format,
+            vk::ImageType::TYPE_2D,
+        )
+    }
+    pub fn from_data_3d(ctx: &Context, data: &[u8], extent: vk::Extent3D, format: vk::Format) -> Self {
+        Self::from_data_(ctx, data, extent, format, vk::ImageType::TYPE_3D)
+    }
+    fn from_data_(
+        ctx: &Context,
+        data: &[u8],
+        extent: vk::Extent3D,
+        format: vk::Format,
+        image_type: vk::ImageType,
+    ) -> Self {
         unsafe {
             let staging_buffer = TBuffer::<u8>::new(
                 ctx,
@@ -623,12 +640,8 @@ impl Image {
                 .device
                 .create_image(
                     &vk::ImageCreateInfo::builder()
-                        .image_type(vk::ImageType::TYPE_2D)
-                        .extent(vk::Extent3D {
-                            width: extent.width,
-                            height: extent.height,
-                            depth: 1,
-                        })
+                        .image_type(image_type)
+                        .extent(extent)
                         .mip_levels(1)
                         .array_layers(1)
                         .format(format)
@@ -683,15 +696,7 @@ impl Image {
                 command_buffer,
                 ctx,
             );
-            copy_buffer_to_image(
-                staging_buffer.handle,
-                0,
-                image,
-                extent.width,
-                extent.height,
-                command_buffer,
-                ctx,
-            );
+            copy_buffer_to_image(staging_buffer.handle, 0, image, extent, command_buffer, ctx);
             transition_image_layout(
                 image,
                 format,
@@ -708,7 +713,12 @@ impl Image {
                 .create_image_view(
                     &vk::ImageViewCreateInfo::builder()
                         .image(image)
-                        .view_type(vk::ImageViewType::TYPE_2D)
+                        .view_type(match image_type {
+                            vk::ImageType::TYPE_1D => vk::ImageViewType::TYPE_1D,
+                            vk::ImageType::TYPE_2D => vk::ImageViewType::TYPE_2D,
+                            vk::ImageType::TYPE_3D => vk::ImageViewType::TYPE_3D,
+                            _ => unimplemented!(),
+                        })
                         .format(format)
                         .subresource_range(
                             vk::ImageSubresourceRange::builder()
@@ -773,7 +783,7 @@ impl Sampler {
             .max_lod(0.0)
             .min_lod(0.0)
             .build();
-        Self::new(ctx, info )
+        Self::new(ctx, info)
     }
     pub fn new(ctx: &Context, create_info: vk::SamplerCreateInfo) -> Self {
         let sampler = unsafe {
