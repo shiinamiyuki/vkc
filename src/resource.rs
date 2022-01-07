@@ -11,7 +11,7 @@ use crate::{allocator::MemoryBlock, default_memory_handle_type};
 
 use super::Context;
 
-pub struct TBuffer<T: bytemuck::Pod> {
+pub struct TBuffer<T: Copy> {
     pub ctx: Context,
     pub handle: vk::Buffer,
     pub size: usize,
@@ -22,7 +22,7 @@ pub struct TBuffer<T: bytemuck::Pod> {
     pub sharing_mode: vk::SharingMode,
     phantom: PhantomData<T>,
 }
-impl<T: bytemuck::Pod> Clone for TBuffer<T> {
+impl<T: Copy> Clone for TBuffer<T> {
     fn clone(&self) -> Self {
         let clone = TBuffer::<T>::new(
             &self.ctx,
@@ -94,25 +94,25 @@ pub fn find_memorytype_index(
         })
         .map(|(index, _memory_type)| index as _)
 }
-pub struct TBufferMap<'a, T: bytemuck::Pod> {
+pub struct TBufferMap<'a, T: Copy> {
     parent: &'a TBuffer<T>,
     pub slice: &'a [T],
     staging_buffer: Option<TBuffer<T>>,
     command_buffer: vk::CommandBuffer,
 }
-pub struct TBufferMapMut<'a, T: bytemuck::Pod> {
+pub struct TBufferMapMut<'a, T: Copy> {
     parent: &'a TBuffer<T>,
     pub slice: &'a mut [T],
     staging_buffer: Option<TBuffer<T>>,
     command_buffer: vk::CommandBuffer,
 }
-struct TBufferMapRaw<'a, T: bytemuck::Pod> {
+struct TBufferMapRaw<'a, T: Copy> {
     parent: &'a TBuffer<T>,
     pub slice: &'a mut [T],
     staging_buffer: Option<TBuffer<T>>,
     command_buffer: vk::CommandBuffer,
 }
-impl<'a, T: bytemuck::Pod> Drop for TBufferMap<'a, T> {
+impl<'a, T: Copy> Drop for TBufferMap<'a, T> {
     fn drop(&mut self) {
         unsafe {
             let ctx = &self.parent.ctx;
@@ -129,7 +129,7 @@ impl<'a, T: bytemuck::Pod> Drop for TBufferMap<'a, T> {
     }
 }
 
-impl<'a, T: bytemuck::Pod> Drop for TBufferMapMut<'a, T> {
+impl<'a, T: Copy> Drop for TBufferMapMut<'a, T> {
     fn drop(&mut self) {
         unsafe {
             let ctx = &self.parent.ctx;
@@ -158,7 +158,7 @@ impl<'a, T: bytemuck::Pod> Drop for TBufferMapMut<'a, T> {
 
 impl<T> TBuffer<T>
 where
-    T: bytemuck::Pod,
+    T: Copy,
 {
     pub fn is_empty(&self) -> bool {
         self.memory.is_none()
@@ -442,7 +442,7 @@ where
     //     }
     // }
 }
-impl<T: bytemuck::Pod> Drop for TBuffer<T> {
+impl<T: Copy> Drop for TBuffer<T> {
     fn drop(&mut self) {
         if self.memory.is_some() {
             unsafe {
@@ -601,7 +601,12 @@ pub struct Image {
     pub mem_req: vk::MemoryRequirements,
 }
 impl Image {
-    pub fn from_data_2d(ctx: &Context, data: &[u8], extent: vk::Extent2D, format: vk::Format) -> Self {
+    pub fn from_data_2d(
+        ctx: &Context,
+        data: &[u8],
+        extent: vk::Extent2D,
+        format: vk::Format,
+    ) -> Self {
         Self::from_data_(
             ctx,
             data,
@@ -614,7 +619,12 @@ impl Image {
             vk::ImageType::TYPE_2D,
         )
     }
-    pub fn from_data_3d(ctx: &Context, data: &[u8], extent: vk::Extent3D, format: vk::Format) -> Self {
+    pub fn from_data_3d(
+        ctx: &Context,
+        data: &[u8],
+        extent: vk::Extent3D,
+        format: vk::Format,
+    ) -> Self {
         Self::from_data_(ctx, data, extent, format, vk::ImageType::TYPE_3D)
     }
     fn from_data_(
