@@ -29,10 +29,10 @@ pub struct Layout {
 
 pub enum Set {
     Bindings(Vec<Binding>),
-    StorageBufferArray(Vec<vk::Buffer>),
+    StorageBufferArray(Vec<vk::Buffer>, usize),
     // UniformBufferArray(&'a [vk::Buffer]),
     // StorageImageArray(Vec<>),
-    SampledImageArray(Vec<(vk::ImageView, vk::ImageLayout)>),
+    SampledImageArray(Vec<(vk::ImageView, vk::ImageLayout)>, usize),
 }
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub enum Binding {
@@ -56,7 +56,7 @@ enum BindingType {
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 enum SetLayout {
     Bindings(Vec<BindingType>),
-    BindlessArray(BindingType),
+    BindlessArray(BindingType, usize),
 }
 fn get_layout(set: &Set) -> SetLayout {
     match set {
@@ -73,8 +73,12 @@ fn get_layout(set: &Set) -> SetLayout {
                 })
                 .collect(),
         ),
-        Set::SampledImageArray(_) => SetLayout::BindlessArray(BindingType::SampledImage),
-        Set::StorageBufferArray(_) => SetLayout::BindlessArray(BindingType::StorageBuffer),
+        Set::SampledImageArray(_, max_size) => {
+            SetLayout::BindlessArray(BindingType::SampledImage, *max_size)
+        }
+        Set::StorageBufferArray(_, max_size) => {
+            SetLayout::BindlessArray(BindingType::StorageBuffer, *max_size)
+        }
     }
 }
 struct DescriptorCache {
@@ -293,7 +297,7 @@ fn create_descriptor_set_layout(
                 descriptor_set_layout
             }
         }
-        Set::SampledImageArray(images) => {
+        Set::SampledImageArray(images, max_size) => {
             let flags: Vec<vk::DescriptorBindingFlags> =
                 vec![vk::DescriptorBindingFlagsEXT::VARIABLE_DESCRIPTOR_COUNT];
             let mut binding_flags = vk::DescriptorSetLayoutBindingFlagsCreateInfoEXT::builder()
@@ -301,7 +305,7 @@ fn create_descriptor_set_layout(
                 .build();
             let real_binding = [vk::DescriptorSetLayoutBinding::builder() // Instances
                 .binding(0)
-                .descriptor_count((images.len() as u32).max(1))
+                .descriptor_count((images.len() as u32).max(1).max(*max_size as u32))
                 .descriptor_type(vk::DescriptorType::SAMPLED_IMAGE)
                 .stage_flags(stage)
                 .build()];
@@ -316,7 +320,7 @@ fn create_descriptor_set_layout(
                 descriptor_set_layout
             }
         }
-        Set::StorageBufferArray(buffers) => {
+        Set::StorageBufferArray(buffers, max_size) => {
             let flags: Vec<vk::DescriptorBindingFlags> =
                 vec![vk::DescriptorBindingFlagsEXT::VARIABLE_DESCRIPTOR_COUNT];
             let mut binding_flags = vk::DescriptorSetLayoutBindingFlagsCreateInfoEXT::builder()
@@ -324,7 +328,7 @@ fn create_descriptor_set_layout(
                 .build();
             let real_binding = [vk::DescriptorSetLayoutBinding::builder() // Instances
                 .binding(0)
-                .descriptor_count((buffers.len() as u32).max(1))
+                .descriptor_count((buffers.len() as u32).max(1).max(*max_size as u32))
                 .descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
                 .stage_flags(stage)
                 .build()];
@@ -445,7 +449,7 @@ fn create_descriptor_set(
                 }
                 Ok(descriptor_set)
             }
-            Set::SampledImageArray(images) => {
+            Set::SampledImageArray(images, _) => {
                 let counts = [images.len() as u32];
                 let mut ext = vk::DescriptorSetVariableDescriptorCountAllocateInfo::builder()
                     .descriptor_counts(&counts);
@@ -478,7 +482,7 @@ fn create_descriptor_set(
                 // device.update_descriptor_sets(&[write], &[]);
                 Ok(descriptor_set)
             }
-            Set::StorageBufferArray(buffers) => {
+            Set::StorageBufferArray(buffers, _) => {
                 let counts = [buffers.len() as u32];
                 let mut ext = vk::DescriptorSetVariableDescriptorCountAllocateInfo::builder()
                     .descriptor_counts(&counts);
