@@ -169,8 +169,8 @@ impl ContextInner {
             // let hidpi_factor: f64 = window.get_hidpi_factor();
             // let physical_dimensions = logical_dimensions.to_physical(hidpi_factor);
 
-            let entry = Entry::new().unwrap();
-            let app_name = CString::new("Rust_VK_RT_HLSL").unwrap();
+            let entry = Entry::load().unwrap();
+            let app_name = CString::new("VKC").unwrap();
 
             let mut layer_names = vec![];
             if info.enable_validation {
@@ -226,7 +226,11 @@ impl ContextInner {
                         | vk::DebugUtilsMessageSeverityFlagsEXT::WARNING
                         | vk::DebugUtilsMessageSeverityFlagsEXT::INFO,
                 )
-                .message_type(vk::DebugUtilsMessageTypeFlagsEXT::all())
+                .message_type(
+                    vk::DebugUtilsMessageTypeFlagsEXT::GENERAL
+                        | vk::DebugUtilsMessageTypeFlagsEXT::VALIDATION
+                        | vk::DebugUtilsMessageTypeFlagsEXT::PERFORMANCE,
+                )
                 .pfn_user_callback(Some(vulkan_debug_callback));
             // let debug_report_loader = DebugReport::new(&entry, &instance);
             // let debug_call_back = debug_report_loader

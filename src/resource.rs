@@ -523,6 +523,24 @@ pub fn transition_image_layout(
                 vk::PipelineStageFlags::TRANSFER,
                 dst_stage_mask,
             )
+        } else if old_layout == vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL
+            && new_layout == vk::ImageLayout::GENERAL
+        {
+            (
+                vk::AccessFlags::SHADER_READ,
+                vk::AccessFlags::MEMORY_READ | vk::AccessFlags::MEMORY_WRITE,
+                src_stage_mask,
+                dst_stage_mask,
+            )
+        } else if old_layout == vk::ImageLayout::GENERAL
+            && new_layout == vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL
+        {
+            (
+                vk::AccessFlags::MEMORY_READ | vk::AccessFlags::MEMORY_WRITE,
+                vk::AccessFlags::SHADER_READ,
+                src_stage_mask,
+                dst_stage_mask,
+            )
         } else {
             panic!("unsupported layout transition");
         };
