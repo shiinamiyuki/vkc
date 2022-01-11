@@ -6,7 +6,7 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-ash = "0.33.3"
+ash = "0.35"
 ash-window = "0.7.0"
 raw-window-handle = "0.3.3"
 bytemuck = {version = "1.7.*", features=["derive"]}
