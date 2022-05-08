@@ -332,12 +332,15 @@ impl ContextInner {
                 .scalar_block_layout(true)
                 .build();
 
-            let mut features2 = vk::PhysicalDeviceFeatures2::default();
-            let mut features_12 = vk::PhysicalDeviceVulkan12Features::builder();
-            if info.enabled_extensions.contains(&Extension::VulkanMemoryModel) {
-                features_12.vulkan_memory_model(true).build();
-            }
+            let mut features2 = vk::PhysicalDeviceFeatures2::builder();
+
+            let mut features_12 = vk::PhysicalDeviceVulkan12Features::default();
+            features2.push_next(&mut features_12);
+            let mut features2 = features2.build();
             (instance.fp_v1_1().get_physical_device_features2)(pdevice, &mut features2);
+            if info.enabled_extensions.contains(&Extension::VulkanMemoryModel) {
+                assert!(features_12.vulkan_memory_model != 0);
+            }
             let mut robustness2features = vk::PhysicalDeviceRobustness2FeaturesEXT::builder()
                 .null_descriptor(true)
                 .build();
