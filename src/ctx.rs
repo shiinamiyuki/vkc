@@ -335,7 +335,7 @@ impl ContextInner {
             let mut features2 = vk::PhysicalDeviceFeatures2::builder();
 
             let mut features_12 = vk::PhysicalDeviceVulkan12Features::default();
-            features2.push_next(&mut features_12);
+            let features2 = features2.push_next(&mut features_12);
             let mut features2 = features2.build();
             (instance.fp_v1_1().get_physical_device_features2)(pdevice, &mut features2);
             if info.enabled_extensions.contains(&Extension::VulkanMemoryModel) {
