@@ -1,9 +1,9 @@
 use ash::vk;
-use std::{cell::RefCell, sync::Arc};
 use std::collections::BTreeSet;
 use std::ffi::c_void;
+use std::{cell::RefCell, sync::Arc};
 
-use crate::{Context, align_to, default_memory_handle_type};
+use crate::{align_to, default_memory_handle_type, Context};
 
 pub struct MemoryAllocateInfo {
     pub size: vk::DeviceSize,
@@ -18,16 +18,31 @@ pub struct MemoryObject {
     ctx: Context,
 }
 impl MemoryObject {
-    fn new(ctx: &Context, size: vk::DeviceSize, memory_index: u32, external_memory: bool) -> Self {
+    fn new(
+        ctx: &Context,
+        size: vk::DeviceSize,
+        memory_index: u32,
+        external_memory: bool,
+        device_address: bool,
+    ) -> Self {
         unsafe {
             let mut allocate_info = vk::MemoryAllocateInfo::builder()
                 .allocation_size(size)
                 .memory_type_index(memory_index);
-            let mut export_info = vk::ExportMemoryAllocateInfo::builder()
-                .handle_types(default_memory_handle_type());
+            let mut export_info =
+                vk::ExportMemoryAllocateInfo::builder().handle_types(default_memory_handle_type());
             if external_memory {
                 assert!(ctx.extensions.contains(&crate::Extension::ExternalMemory));
                 allocate_info = allocate_info.push_next(&mut export_info);
+            }
+            let mut flags = vk::MemoryAllocateFlagsInfo::builder()
+                .flags(vk::MemoryAllocateFlags::DEVICE_ADDRESS)
+                .build();
+            if device_address {
+                assert!(ctx
+                    .extensions
+                    .contains(&crate::Extension::VulkanMemoryModel));
+                allocate_info = allocate_info.push_next(&mut flags);
             }
             let memory = ctx
                 .device
@@ -117,6 +132,7 @@ impl GPUAllocator {
         alignment: vk::DeviceSize,
         memory_type_index: u32,
         external_memory: bool,
+        device_address: bool,
     ) -> MemoryBlock {
         let mut chosen: Option<MemoryBlock> = None;
         let mut splitted: Option<MemoryBlock> = None;
@@ -166,6 +182,7 @@ impl GPUAllocator {
                 size.max(65536),
                 memory_type_index,
                 external_memory,
+                device_address
             );
             let size = obj.size;
             let block = MemoryBlock {

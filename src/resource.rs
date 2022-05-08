@@ -199,7 +199,7 @@ where
                 .device
                 .create_buffer(&create_info, ctx.allocation_callbacks.as_ref())
                 .unwrap();
-
+            let device_address = usage.contains(vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS);
             let req = ctx.device.get_buffer_memory_requirements(handle);
             let memory_index =
                 find_memorytype_index(&req, &ctx.device_memory_properties, memory_property_flags)
@@ -207,7 +207,7 @@ where
             let memory_block = {
                 let mut allocator = ctx.allocator.write().unwrap();
                 let allocator = allocator.as_mut().unwrap();
-                allocator.allocate(req.size, req.alignment, memory_index, true)
+                allocator.allocate(req.size, req.alignment, memory_index, true, device_address)
             };
             ctx.device
                 .bind_buffer_memory(handle, memory_block.alloc_obj.memory, memory_block.offset)
@@ -258,7 +258,7 @@ where
                 .device
                 .create_buffer(&create_info, ctx.allocation_callbacks.as_ref())
                 .unwrap();
-
+            let device_address = usage.contains(vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS);
             let req = ctx.device.get_buffer_memory_requirements(handle);
             let memory_index =
                 find_memorytype_index(&req, &ctx.device_memory_properties, memory_property_flags)
@@ -266,7 +266,7 @@ where
             let memory_block = {
                 let mut allocator = ctx.allocator.write().unwrap();
                 let allocator = allocator.as_mut().unwrap();
-                allocator.allocate(req.size, req.alignment, memory_index, false)
+                allocator.allocate(req.size, req.alignment, memory_index, false, device_address)
             };
             ctx.device
                 .bind_buffer_memory(handle, memory_block.alloc_obj.memory, memory_block.offset)
@@ -698,6 +698,7 @@ impl Image {
                     memory_requirements.size,
                     memory_requirements.alignment,
                     memory_index,
+                    false,
                     false,
                 )
             };
