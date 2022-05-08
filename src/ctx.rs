@@ -153,6 +153,7 @@ pub enum Extension {
     RayTracing,
     ShaderAtomicFloat,
     ExternalMemory,
+    VulkanMemoryModel,
     // TimelineSemaphore, // Default enabled
 }
 
@@ -305,6 +306,9 @@ impl ContextInner {
             }
             if info.enabled_extensions.contains(&Extension::ExternalMemory) {
                 device_extension_names_raw.push(vk::KhrExternalMemoryWin32Fn::name().as_ptr());
+            }
+            if info.enabled_extensions.contains(&Extension::VulkanMemoryModel) {
+                device_extension_names_raw.push(vk::KhrVulkanMemoryModelFn::name().as_ptr());
             }
             let priorities = [1.0];
 
