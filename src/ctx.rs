@@ -185,7 +185,9 @@ impl ContextInner {
 
             let mut extension_names_raw = extension_names();
             let surface_extensions = if window.is_some() {
-                ash_window::enumerate_required_extensions(window.unwrap()).unwrap().to_vec()
+                ash_window::enumerate_required_extensions(window.unwrap())
+                    .unwrap()
+                    .to_vec()
             } else {
                 vec![]
             };
@@ -307,7 +309,10 @@ impl ContextInner {
             if info.enabled_extensions.contains(&Extension::ExternalMemory) {
                 device_extension_names_raw.push(vk::KhrExternalMemoryWin32Fn::name().as_ptr());
             }
-            if info.enabled_extensions.contains(&Extension::VulkanMemoryModel) {
+            if info
+                .enabled_extensions
+                .contains(&Extension::VulkanMemoryModel)
+            {
                 device_extension_names_raw.push(vk::KhrVulkanMemoryModelFn::name().as_ptr());
             }
             let priorities = [1.0];
@@ -328,9 +333,7 @@ impl ContextInner {
                 .build();
 
             let mut features2 = vk::PhysicalDeviceFeatures2::default();
-            (instance
-                .fp_v1_1()
-                .get_physical_device_features2)(pdevice, &mut features2);
+            (instance.fp_v1_1().get_physical_device_features2)(pdevice, &mut features2);
             let mut robustness2features = vk::PhysicalDeviceRobustness2FeaturesEXT::builder()
                 .null_descriptor(true)
                 .build();
@@ -340,6 +343,9 @@ impl ContextInner {
             let mut shader_atomic_float = vk::PhysicalDeviceShaderAtomicFloatFeaturesEXT::builder()
                 .shader_buffer_float32_atomic_add(true)
                 .shader_buffer_float32_atomics(true)
+                .build();
+            let mut vulkan_memory_model = vk::PhysicalDeviceVulkanMemoryModelFeaturesKHR::builder()
+                .vulkan_memory_model(true)
                 .build();
             let mut timeline_semaphore = vk::PhysicalDeviceTimelineSemaphoreFeatures::builder()
                 .timeline_semaphore(true)
@@ -358,6 +364,12 @@ impl ContextInner {
                     .contains(&Extension::ShaderAtomicFloat)
                 {
                     builder = builder.push_next(&mut shader_atomic_float);
+                }
+                if info
+                    .enabled_extensions
+                    .contains(&Extension::VulkanMemoryModel)
+                {
+                    builder = builder.push_next(&mut vulkan_memory_model);
                 }
                 // if info
                 //     .enabled_extensions
