@@ -314,6 +314,7 @@ impl ContextInner {
                 .contains(&Extension::VulkanMemoryModel)
             {
                 device_extension_names_raw.push(vk::KhrVulkanMemoryModelFn::name().as_ptr());
+                device_extension_names_raw.push(vk::KhrBufferDeviceAddressFn::name().as_ptr());
             }
             let priorities = [1.0];
 
@@ -338,7 +339,10 @@ impl ContextInner {
             let features2 = features2.push_next(&mut features_12);
             let mut features2 = features2.build();
             (instance.fp_v1_1().get_physical_device_features2)(pdevice, &mut features2);
-            if info.enabled_extensions.contains(&Extension::VulkanMemoryModel) {
+            if info
+                .enabled_extensions
+                .contains(&Extension::VulkanMemoryModel)
+            {
                 assert!(features_12.vulkan_memory_model != 0);
             }
             let mut robustness2features = vk::PhysicalDeviceRobustness2FeaturesEXT::builder()
@@ -354,6 +358,10 @@ impl ContextInner {
             let mut vulkan_memory_model = vk::PhysicalDeviceVulkanMemoryModelFeaturesKHR::builder()
                 .vulkan_memory_model(true)
                 .build();
+            let mut physical_buffer_address =
+                vk::PhysicalDeviceBufferDeviceAddressFeaturesKHR::builder()
+                    .buffer_device_address(true)
+                    .build();
             let mut timeline_semaphore = vk::PhysicalDeviceTimelineSemaphoreFeatures::builder()
                 .timeline_semaphore(true)
                 .build();
@@ -377,6 +385,7 @@ impl ContextInner {
                     .contains(&Extension::VulkanMemoryModel)
                 {
                     builder = builder.push_next(&mut vulkan_memory_model);
+                    builder = builder.push_next(&mut physical_buffer_address);
                 }
                 // if info
                 //     .enabled_extensions
