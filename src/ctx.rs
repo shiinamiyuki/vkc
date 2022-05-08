@@ -184,12 +184,12 @@ impl ContextInner {
 
             let mut extension_names_raw = extension_names();
             let surface_extensions = if window.is_some() {
-                ash_window::enumerate_required_extensions(window.unwrap()).unwrap()
+                ash_window::enumerate_required_extensions(window.unwrap()).unwrap().to_vec()
             } else {
                 vec![]
             };
             for e in &surface_extensions {
-                extension_names_raw.push(e.as_ptr());
+                extension_names_raw.push(*e);
             }
 
             let appinfo = vk::ApplicationInfo::builder()
@@ -324,9 +324,9 @@ impl ContextInner {
                 .build();
 
             let mut features2 = vk::PhysicalDeviceFeatures2::default();
-            instance
+            (instance
                 .fp_v1_1()
-                .get_physical_device_features2(pdevice, &mut features2);
+                .get_physical_device_features2)(pdevice, &mut features2);
             let mut robustness2features = vk::PhysicalDeviceRobustness2FeaturesEXT::builder()
                 .null_descriptor(true)
                 .build();
