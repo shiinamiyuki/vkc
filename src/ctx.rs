@@ -160,6 +160,7 @@ pub enum Extension {
 pub struct ContextCreateInfo<'a> {
     pub enabled_extensions: &'a [Extension],
     pub enable_validation: bool,
+    pub device_index: Option<usize>,
 }
 impl ContextInner {
     fn new_1(
@@ -280,7 +281,7 @@ impl ContextInner {
                         .nth(0)
                 })
                 .filter_map(|v| v)
-                .nth(0)
+                .nth(info.device_index.unwrap_or(0))
                 .expect("Couldn't find suitable device.");
             let queue_family_index = queue_family_index as u32;
 

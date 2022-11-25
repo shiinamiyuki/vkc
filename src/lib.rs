@@ -9,6 +9,7 @@ mod tests {
         let ctx = Context::new_compute_only(ContextCreateInfo {
             enabled_extensions: &[],
             enable_validation: true,
+            device_index: None,
         });
         let profiler = Profiler::new(&ctx, 1024);
     }
@@ -22,6 +23,7 @@ mod tests {
         let ctx = Context::new_compute_only(ContextCreateInfo {
             enabled_extensions: &[],
             enable_validation: true,
+            device_index: None,
         });
         for i in 1..1024 {
             let buffer: TBuffer<usize> = TBuffer::new(
@@ -74,6 +76,7 @@ mod tests {
         let ctx = Context::new_compute_only(ContextCreateInfo {
             enabled_extensions: &[],
             enable_validation: true,
+            device_index: None,
         });
         for i in 1..1024 {
             let buffer: TBuffer<usize> = TBuffer::new(
@@ -106,6 +109,7 @@ mod tests {
         let ctx = Context::new_compute_only(ContextCreateInfo {
             enabled_extensions: &[],
             enable_validation: true,
+            device_index: None,
         });
         let mut buffers = vec![];
         for i in 0..1024 {
