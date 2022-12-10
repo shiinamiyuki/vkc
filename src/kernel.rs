@@ -5,8 +5,8 @@ use std::{
     hash::Hash,
     rc::Rc,
 };
-
-use ash::{extensions::nv, prelude::VkResult, vk};
+use ash::extensions::nv::RayTracing;
+use ash::{extensions::khr, prelude::VkResult, vk};
 
 use super::TBuffer;
 
@@ -245,7 +245,7 @@ pub struct Kernel {
     descriptor_sets: Vec<vk::DescriptorSet>,
     descriptor_cache: RefCell<DescriptorCache>,
     descriptor_set_layouts: Vec<vk::DescriptorSetLayout>,
-    rtx: Option<Rc<nv::RayTracing>>,
+    rtx: Option<Rc<RayTracing>>,
     pub sbt: Option<TBuffer<u8>>,
 }
 
@@ -651,7 +651,7 @@ pub struct SbtRecord {
 impl Kernel {
     pub fn new_rchit(
         ctx: &Context,
-        rtx: &Rc<nv::RayTracing>,
+        rtx: &Rc<RayTracing>,
         ray_gen: &[u32],
         hit: &[u32],
         miss: &[u32],
@@ -661,7 +661,7 @@ impl Kernel {
     }
     pub fn new_rahit(
         ctx: &Context,
-        rtx: &Rc<nv::RayTracing>,
+        rtx: &Rc<RayTracing>,
         ray_gen: &[u32],
         hit: &[u32],
         miss: &[u32],
@@ -671,7 +671,7 @@ impl Kernel {
     }
     fn new_rt_kernel(
         ctx: &Context,
-        rtx: &Rc<nv::RayTracing>,
+        rtx: &Rc<RayTracing>,
         ray_gen: &[u32],
         hit: &[u32],
         miss: &[u32],
@@ -810,7 +810,7 @@ impl Kernel {
                 )
                 .unwrap()[0];
             let sbt = {
-                let props_rt = nv::RayTracing::get_properties(&ctx.instance, ctx.pdevice);
+                let props_rt = RayTracing::get_properties(&ctx.instance, ctx.pdevice);
                 let group_count = 3; // Listed in vk::RayTracingPipelineCreateInfoNV
                 let handle_size = props_rt.shader_group_handle_size as usize;
                 let alignment = props_rt.shader_group_base_alignment as usize;
@@ -1074,12 +1074,12 @@ pub struct RayTracingKernel {
     miss: Vec<u32>,
     imp: RefCell<Option<Kernel>>,
     ctx: Context,
-    rtx: Rc<nv::RayTracing>,
+    rtx: Rc<RayTracing>,
 }
 impl RayTracingKernel {
     pub fn new_rchit(
         ctx: &Context,
-        rtx: &Rc<nv::RayTracing>,
+        rtx: &Rc<RayTracing>,
         ray_gen: &[u32],
         hit: &[u32],
         miss: &[u32],

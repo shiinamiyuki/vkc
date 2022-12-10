@@ -308,7 +308,11 @@ impl ContextInner {
                 device_extension_names_raw.push(RayTracing::name().as_ptr());
             }
             if info.enabled_extensions.contains(&Extension::ExternalMemory) {
-                device_extension_names_raw.push(vk::KhrExternalMemoryWin32Fn::name().as_ptr());
+                if cfg!(target_os = "windows") {
+                    device_extension_names_raw.push(vk::KhrExternalMemoryWin32Fn::name().as_ptr());
+                }else{
+                    device_extension_names_raw.push(vk::KhrExternalMemoryFdFn::name().as_ptr());
+                }
             }
             if info
                 .enabled_extensions
